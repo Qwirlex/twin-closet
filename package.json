@@ -1,0 +1,10 @@
+{
+  "name": "twin-closet",
+  "private": true,
+  "workspaces": ["app", "server", "packages/*"],
+  "scripts": {
+    "server": "npm run dev -w @twin/server",
+    "app": "npm run start -w @twin/app",
+    "typecheck": "npm run typecheck -w @twin/server -w @twin/shared && cd app && npx tsc --noEmit"
+  }
+}
