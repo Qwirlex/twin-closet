@@ -150,4 +150,4 @@
 ---
 
 **Справка по API:** [docs/meta-api.md](docs/meta-api.md).
-**Макеты экранов:** https://claude.ai/artifact/8oMisaLBUdSW47tb7C3jYp (приватная ссылка; тёмная тема, Manrope, акцент #D4FF5A, интерфейс на английском).
+**Макеты экранов:** https://claude.ai/artifact/8oMisaLBUdSW47tb7C3jYp — дизайн-система в [docs/design.md](docs/design.md).
