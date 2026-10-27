@@ -25,7 +25,7 @@ function setup() {
   const store = new Store(mkdtempSync(join(dir, 'data-')))
   const meta = new MetaApi('')
   const jobs = new Jobs(store, meta, samples)
-  const app = createApp({ store, jobs, meta, watch: new PriceWatch(store, meta, PriceWatch.jobSearch(jobs)) })
+  const app = createApp({ store, jobs, meta, watch: new PriceWatch(store, meta, PriceWatch.jobSearch(jobs, meta)) })
   return { store, app }
 }
 

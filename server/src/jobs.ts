@@ -2,8 +2,9 @@
 // Всё, что не требует моделей (видео → MP4, ключевые кадры), работает уже сейчас; шаги моделей ждут ключ Meta.
 import { copyFileSync, existsSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
-import { LIVE_STORE_IDS, type Job, type JobErrorCode, type JobInput, type JobKind, type JobResult, type JobStep, type MediaInfo, type SampleName } from '@twin/shared'
+import { LIVE_STORE_DOMAINS, LIVE_STORE_IDS, type Job, type JobErrorCode, type JobInput, type JobKind, type JobResult, type JobStep, type MediaInfo, type SampleName } from '@twin/shared'
 import { keyframes, normalizeImage, normalizeVideo, probe } from './media'
+import { findProduct, runTask, storeLinks, text, type FoundProducts } from './models/spark'
 import type { MetaApi } from './meta'
 import type { Store } from './store'
 
@@ -56,6 +57,15 @@ const KEYFRAMES: Partial<Record<JobKind, number>> = { closet_scan: 8, body_scan:
 
 const SAMPLE_EXT = ['.mp4', '.mov', '.jpg', '.jpeg', '.png', '.webp']
 
+export const STORE_NAMES: Record<string, string> = { zara: 'Zara', bershka: 'Bershka', 'pull-and-bear': 'Pull & Bear' }
+
+/** Общее между шагами одной задачи */
+interface StepContext {
+  input: JobInput
+  result: JobResult
+  scratch: Record<string, unknown>
+}
+
 interface Source {
   /** null — задача без файла (поиск вещи в магазине) */
   path: string | null
@@ -92,7 +102,7 @@ export class Jobs {
     if (cached) {
       return this.store.updateJob(job.id, { status: 'done', percent: 1, progress: 'Done', steps: cached.steps, result: cached.result })
     }
-    void this.run(job.id, kind, source)
+    void this.run(job.id, kind, source, input)
     return job
   }
 
@@ -129,7 +139,7 @@ export class Jobs {
       .at(-1)
   }
 
-  private async run(id: string, kind: JobKind, source: Source): Promise<void> {
+  private async run(id: string, kind: JobKind, source: Source, input: JobInput): Promise<void> {
     const steps = STEPS[kind]
     const statuses = new Map(steps.map((s) => [s.key, 'pending' as JobStep['status']]))
     const result: JobResult = {}
@@ -166,7 +176,8 @@ export class Jobs {
         statuses.set('keyframes', 'done')
         result.keyframes = [`/files/${id}.jpg`]
       }
-      for (const s of steps.filter((d) => d.model)) await step(s.key, () => this.modelStep(kind, s.key))
+      const ctx: StepContext = { input, result, scratch: {} }
+      for (const s of steps.filter((d) => d.model)) await step(s.key, () => this.modelStep(kind, s.key, ctx))
       sync({ status: 'done', progress: 'Done', percent: 1 })
     } catch (e) {
       const err = e instanceof JobError ? e : new JobError('internal', e instanceof Error ? e.message : String(e))
@@ -200,8 +211,47 @@ export class Jobs {
     if (!this.meta.configured) throw new JobError('no_key', `Your file is ready. ${model} runs this step once the server has the Meta key.`)
   }
 
-  /** Шаги моделей Meta: собираем с ключом (PLAN.md, дни 2–5) */
-  private async modelStep(kind: JobKind, key: string): Promise<void> {
+  /**
+   * Шаги моделей Meta. Поиск вещи в магазине — только Muse Spark с веб-поиском, подключён.
+   * Остальное (SAM и примерка) собираем с ключом, когда увидим живые ответы (PLAN.md, дни 2–5)
+   */
+  private async modelStep(kind: JobKind, key: string, ctx: StepContext): Promise<void> {
+    if (kind === 'product_lookup' && 'lookup' in ctx.input) {
+      const q = ctx.input.lookup
+      const store = { name: STORE_NAMES[q.storeId] ?? q.storeId, domain: LIVE_STORE_DOMAINS[q.storeId as keyof typeof LIVE_STORE_DOMAINS] }
+      if (key === 'search') {
+        const lines = [q.ref ? `Article reference (REF): ${q.ref}` : null, q.query ? `Item: ${q.query}` : null, `Country: ${q.country}`].filter(Boolean)
+        const { data, raw } = await runTask(this.meta, findProduct(store), [text(lines.join('\n'))], { webSearchCountry: q.country }).catch((e) => {
+          throw new JobError('model', `Muse Spark search failed: ${e instanceof Error ? e.message : e}`)
+        })
+        ctx.scratch.products = data.products
+        ctx.scratch.links = storeLinks(raw, store.domain)
+        return
+      }
+      if (key === 'read') {
+        const found = (ctx.scratch.products as FoundProducts['products'] | undefined) ?? []
+        const links = (ctx.scratch.links as string[] | undefined) ?? []
+        const host = (u: string) => {
+          try {
+            return new URL(u).hostname
+          } catch {
+            return null
+          }
+        }
+        const onStore = (u: string) => {
+          const h = host(u)
+          return !!h && (h === store.domain || h.endsWith(`.${store.domain}`))
+        }
+        // ссылка с другого сайта — вещь отбрасываем; битую или пустую ссылку заменяем страницей магазина из цитат
+        const spare = links.filter((l) => !found.some((p) => p.url === l))
+        ctx.result.products = found
+          .filter((p) => !host(p.url) || onStore(p.url))
+          .map((p) => ({ ...p, url: host(p.url) ? p.url : (spare.shift() ?? '') }))
+          .filter((p) => onStore(p.url))
+          .map((p) => ({ title: p.title, url: p.url, price: p.price, currency: p.currency, snippet: '' }))
+        return
+      }
+    }
     throw new JobError('model', `The ${key} step of ${kind.replace('_', ' ')} is not connected to the Meta models yet.`)
   }
 }

@@ -2,7 +2,8 @@
 // Цену берём только из веб-поиска Muse Spark и только со страниц того же магазина; сайты и API магазинов не трогаем.
 // Экономия: раз в день спрашиваем «идёт ли распродажа» по магазину; вещи — каждый день только в распродажу, иначе раз в неделю.
 import { LIVE_STORE_DOMAINS, LIVE_STORE_IDS, type PricePoint, type ProductHit, type StoreSale, type WatchItem } from '@twin/shared'
-import type { Jobs } from './jobs'
+import { STORE_NAMES, type Jobs } from './jobs'
+import { runTask, storeSale, text } from './models/spark'
 import type { MetaApi } from './meta'
 import type { Store } from './store'
 
@@ -122,15 +123,17 @@ export class PriceWatch {
   ) {}
 
   /** Поиск через задачу product_lookup (Muse Spark web search); «распродажа?» соберём вместе с ключом */
-  static jobSearch(jobs: Jobs): Search {
+  static jobSearch(jobs: Jobs, meta: MetaApi): Search {
     return {
       async product(item) {
         const job = jobs.start('product_lookup', { lookup: { storeId: item.storeId, ref: item.ref ?? undefined, query: item.ref ? undefined : item.name, country: item.country } })
         const done = await jobs.wait(job.id)
         return done.status === 'done' ? (done.result.products?.[0] ?? null) : null
       },
-      async storeSale() {
-        throw new Error('The store sale check is not connected to Muse Spark yet')
+      async storeSale(storeId, country) {
+        const store = { name: STORE_NAMES[storeId] ?? storeId, domain: LIVE_STORE_DOMAINS[storeId as keyof typeof LIVE_STORE_DOMAINS] }
+        const { data } = await runTask(meta, storeSale(store), [text(`Country: ${country}`)], { webSearchCountry: country })
+        return { onSale: data.on_sale, source: data.source_url }
       }
     }
   }
