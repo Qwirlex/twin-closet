@@ -162,10 +162,47 @@ export interface WatchItem {
   price: number | null
   currency: string | null
   country: string
+  /** «скажи, когда будет дешевле» — своя цель человека */
+  targetPrice: number | null
+  /** последняя подтверждённая цена */
   lastPrice: number | null
+  /** цена ниже, чем при добавлении, — подтверждена двумя проверками */
   onSale: boolean
+  /** подтверждённая цена не выше цели */
+  hitTarget: boolean
+  /** первая проверка нашла цену ниже — ждём повторную, прежде чем показать */
+  pendingPrice: number | null
+  /** самая низкая цена за 30 дней по истории проверок */
+  lowest30: number | null
+  /** страница, с которой взята цена */
+  source: string | null
   checkedAt: string | null
+}
+
+/** Одна проверка цены — из них история и «самая низкая за 30 дней» */
+export interface PricePoint {
+  itemId: string
+  price: number
+  currency: string | null
+  url: string
+  checkedAt: string
+}
+
+/** Идёт ли распродажа в магазине в этой стране — один поиск Spark в день */
+export interface StoreSale {
+  storeId: string
+  country: string
+  onSale: boolean
+  source: string | null
+  checkedAt: string
 }
 
 /** Магазины, где поиск вещей и слежка за ценой уже работают; остальные — «Coming soon» */
 export const LIVE_STORE_IDS = ['zara', 'bershka', 'pull-and-bear'] as const
+
+/** Сайты живых магазинов: цену принимаем только со страниц этих доменов */
+export const LIVE_STORE_DOMAINS: Record<(typeof LIVE_STORE_IDS)[number], string> = {
+  zara: 'zara.com',
+  bershka: 'bershka.com',
+  'pull-and-bear': 'pullandbear.com'
+}

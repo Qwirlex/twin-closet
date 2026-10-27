@@ -1,4 +1,4 @@
-import type { Job, WatchItem } from '@twin/shared'
+import type { Job, ProductHit, WatchItem } from '@twin/shared'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,43 +7,116 @@ import { createApp } from '../src/app'
 import { Jobs } from '../src/jobs'
 import { MetaApi } from '../src/meta'
 import { Store } from '../src/store'
-import { applyPrice, PriceWatch } from '../src/watch'
+import { applyCheck, blackFriday, dueForCheck, lowest30, PriceWatch, saleSeason, sameItem, type Search } from '../src/watch'
 
-function setup() {
+const HOUR = 3_600_000
+const item: WatchItem = {
+  id: 'w1', name: 'Wide-leg jeans', storeId: 'zara', ref: '1234/567/800', url: null, price: 39.95, currency: 'EUR', country: 'IE',
+  targetPrice: null, lastPrice: null, onSale: false, hitTarget: false, pendingPrice: null, lowest30: null, source: null, checkedAt: null
+}
+const hit = (price: number | null, over: Partial<ProductHit> = {}): ProductHit => ({ title: 'WIDE-LEG JEANS', url: 'https://www.zara.com/ie/en/wide-leg-jeans-p01234567.html', price, currency: 'EUR', snippet: 'Ref. 1234/567/800', ...over })
+const at = (iso: string) => new Date(iso)
+
+function setup(search?: Partial<Search>, key = '') {
   const store = new Store(mkdtempSync(join(tmpdir(), 'twin-watch-')))
-  const meta = new MetaApi('')
+  const meta = new MetaApi(key)
   const jobs = new Jobs(store, meta, join(tmpdir(), 'no-samples'))
-  const watch = new PriceWatch(store, jobs, meta)
-  return { store, watch, app: createApp({ store, jobs, meta, watch }) }
+  const s: Search = { product: async () => null, storeSale: async () => ({ onSale: false, source: null }), ...search }
+  const watch = new PriceWatch(store, meta, s)
+  return { store, watch, jobs, app: createApp({ store, jobs, meta, watch }) }
 }
 
-const item: WatchItem = { id: 'w1', name: 'Wide-leg jeans', storeId: 'zara', ref: '1234/567/800', url: null, price: 39.95, currency: 'EUR', country: 'IE', lastPrice: null, onSale: false, checkedAt: null }
-const hit = (price: number | null, currency = 'EUR') => ({ title: 'Wide-leg jeans', url: 'https://www.zara.com/ie/en/p1', price, currency, snippet: '' })
-
-describe('price watch', () => {
-  it('marks a sale only when the price drops in the same currency', () => {
-    const now = new Date('2026-10-28T09:00:00Z')
-    expect(applyPrice(item, hit(29.95), now)).toMatchObject({ lastPrice: 29.95, onSale: true, url: 'https://www.zara.com/ie/en/p1', checkedAt: now.toISOString() })
-    expect(applyPrice(item, hit(39.95), now).onSale).toBe(false)
-    expect(applyPrice(item, hit(25, 'GBP'), now).onSale).toBe(false)
-    expect(applyPrice(item, null, now)).toMatchObject({ lastPrice: null, onSale: false, checkedAt: now.toISOString() })
+describe('a price drop counts only when it is real', () => {
+  it('needs two checks with the same lower price', () => {
+    const first = applyCheck(item, hit(29.95), [], at('2026-12-27T09:00:00Z'))
+    expect(first.item).toMatchObject({ onSale: false, pendingPrice: 29.95, lastPrice: null })
+    expect(first.point?.price).toBe(29.95)
+    const second = applyCheck(first.item, hit(29.95), [first.point!], at('2026-12-27T10:00:00Z'))
+    expect(second.item).toMatchObject({ onSale: true, pendingPrice: null, lastPrice: 29.95, lowest30: 29.95, source: hit(1).url })
   })
 
-  it('keeps only live stores and remembers earlier checks when the wishlist changes', async () => {
+  it('a different second price restarts the wait; a price back up ends the sale', () => {
+    const a = applyCheck(item, hit(29.95), []).item
+    const b = applyCheck(a, hit(25.95), []).item
+    expect(b).toMatchObject({ onSale: false, pendingPrice: 25.95 })
+    const sale = { ...item, onSale: true, lastPrice: 29.95 }
+    expect(applyCheck(sale, hit(39.95), []).item).toMatchObject({ onSale: false, lastPrice: 39.95, pendingPrice: null })
+  })
+
+  it('ignores other sites, other currencies and other pieces', () => {
+    expect(applyCheck(item, hit(19.95, { url: 'https://deals.example.com/zara-jeans' }), []).point).toBeNull()
+    expect(applyCheck(item, hit(19.95, { currency: 'GBP' }), []).point).toBeNull()
+    expect(applyCheck(item, hit(19.95, { url: 'https://www.zara.com/ie/en/other-p09999999.html', snippet: 'Ref. 9999/999/800' }), []).point).toBeNull()
+    expect(sameItem({ ...item, ref: null }, hit(1))).toBe(true)
+    expect(sameItem({ ...item, ref: null, name: 'Linen shirt' }, hit(1))).toBe(false)
+  })
+
+  it('tells when the price reaches the target, even without a drop below the saved price', () => {
+    const withTarget = { ...item, price: null, targetPrice: 30 }
+    const a = applyCheck(withTarget, hit(29.5), []).item
+    expect(applyCheck(a, hit(29.5), []).item).toMatchObject({ hitTarget: true, onSale: false })
+  })
+
+  it('lowest price over 30 days', () => {
+    const pts = [29.95, 35, 25].map((price, i) => ({ itemId: 'w1', price, currency: 'EUR', url: 'u', checkedAt: new Date(Date.UTC(2026, 9, 1 + i * 20)).toISOString() }))
+    expect(lowest30(pts, at('2026-11-15T00:00:00Z'))).toBe(25)
+    expect(lowest30(pts, at('2026-12-31T00:00:00Z'))).toBeNull()
+  })
+})
+
+describe('how often to check', () => {
+  it('knows the usual sale seasons', () => {
+    expect(blackFriday(2026).toISOString().slice(0, 10)).toBe('2026-11-27')
+    expect(saleSeason(at('2026-11-25T12:00:00Z'))).toBe(true)
+    expect(saleSeason(at('2026-12-26T12:00:00Z'))).toBe(true)
+    expect(saleSeason(at('2027-07-10T12:00:00Z'))).toBe(true)
+    expect(saleSeason(at('2026-10-28T12:00:00Z'))).toBe(false)
+  })
+
+  it('weekly out of season, daily in a sale, an hour after a first drop', () => {
+    const oct = at('2026-10-28T12:00:00Z')
+    const twoDays = { ...item, checkedAt: new Date(oct.getTime() - 48 * HOUR).toISOString() }
+    expect(dueForCheck(twoDays, undefined, oct)).toBe(false)
+    expect(dueForCheck(twoDays, { storeId: 'zara', country: 'IE', onSale: true, source: null, checkedAt: oct.toISOString() }, oct)).toBe(true)
+    expect(dueForCheck({ ...item, checkedAt: new Date(oct.getTime() - 8 * 24 * HOUR).toISOString() }, undefined, oct)).toBe(true)
+    expect(dueForCheck({ ...item, pendingPrice: 29.95, checkedAt: new Date(oct.getTime() - 61 * 60_000).toISOString() }, undefined, oct)).toBe(true)
+    expect(dueForCheck(item, undefined, oct)).toBe(true)
+  })
+})
+
+describe('price watch on the server', () => {
+  it('keeps only live stores, remembers checks and accepts a target price', async () => {
     const { app, store } = setup()
     const put = (items: object[]) => app.request('/watch', { method: 'PUT', body: JSON.stringify({ items }), headers: { 'content-type': 'application/json' } })
     const mango = { ...item, id: 'w2', storeId: 'mango' }
     expect((await (await put([item, mango])).json()).items.map((i: WatchItem) => i.id)).toEqual(['w1'])
     store.setWatch(store.watch().map((w) => ({ ...w, lastPrice: 29.95, onSale: true, checkedAt: 'x' })))
-    await put([{ ...item, name: 'Wide-leg jeans, light' }])
+    await put([{ ...item, name: 'Wide-leg jeans, light', targetPrice: 30 }])
     const { items } = (await (await app.request('/watch')).json()) as { items: WatchItem[] }
-    expect(items[0]).toMatchObject({ name: 'Wide-leg jeans, light', lastPrice: 29.95, onSale: true })
+    expect(items[0]).toMatchObject({ name: 'Wide-leg jeans, light', lastPrice: 29.95, onSale: true, targetPrice: 30, hitTarget: true })
   })
 
-  it('without the Meta key the daily check is skipped', async () => {
-    const { watch } = setup()
+  it('without the Meta key nothing is searched', async () => {
+    const { watch } = setup({ product: async () => hit(1) })
     watch.put([item])
-    expect(await watch.checkAll()).toEqual({ checked: 0, skipped: 'no_key' })
+    expect(await watch.tick()).toEqual({ checked: 0, sales: 0, skipped: 'no_key' })
+  })
+
+  it('a full pass: store sale first, then items that are due, confirmed an hour later', async () => {
+    let price = 29.95
+    const { watch, app } = setup({ product: async () => hit(price), storeSale: async () => ({ onSale: true, source: 'https://www.zara.com/ie/' }) }, 'test-key')
+    watch.put([item])
+    const t0 = at('2026-12-27T09:00:00Z')
+    expect(await watch.tick(t0)).toEqual({ checked: 1, sales: 1 })
+    expect(watch.list()[0]).toMatchObject({ pendingPrice: 29.95, onSale: false })
+    expect(await watch.tick(new Date(t0.getTime() + 30 * 60_000))).toEqual({ checked: 0, sales: 0 })
+    await watch.tick(new Date(t0.getTime() + HOUR))
+    expect(watch.list()[0]).toMatchObject({ onSale: true, lastPrice: 29.95 })
+    const { points } = await (await app.request('/watch/w1/history')).json()
+    expect(points).toHaveLength(2)
+    price = 39.95
+    await watch.tick(new Date(t0.getTime() + 25 * HOUR))
+    expect(watch.list()[0]).toMatchObject({ onSale: false, lastPrice: 39.95 })
   })
 })
 
@@ -51,9 +124,8 @@ describe('product lookup', () => {
   const start = (app: ReturnType<typeof setup>['app'], lookup: object) => app.request('/jobs', { method: 'POST', body: JSON.stringify({ kind: 'product_lookup', lookup }), headers: { 'content-type': 'application/json' } })
 
   it('searches live stores with Muse Spark and waits for the key', async () => {
-    const { app, store } = setup()
+    const { app, jobs } = setup()
     const job = (await (await start(app, { storeId: 'zara', ref: '1234/567/800', country: 'IE' })).json()) as Job
-    const jobs = new Jobs(store, new MetaApi(''), '')
     const done = await jobs.wait(job.id)
     expect(done.errorCode).toBe('no_key')
     expect(done.steps.map((s) => s.model)).toEqual(['Muse Spark', 'Muse Spark'])

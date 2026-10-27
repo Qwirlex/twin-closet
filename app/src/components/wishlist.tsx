@@ -12,7 +12,7 @@ import { useTheme } from '@/theme/theme';
 export function WishlistView({ tileW }: { tileW: number }) {
   const { t } = useTheme();
   const { wishlist, watch, favoriteIds } = useShopping();
-  const drops = wishlist.filter((w) => watch(w.id)?.onSale);
+  const drops = wishlist.filter((w) => watch(w.id)?.onSale || watch(w.id)?.hitTarget);
 
   return (
     <View style={{ gap: 16 }}>
@@ -64,30 +64,36 @@ function WishTile({ wish }: { wish: Wish }) {
   const { watch, removeWish } = useShopping();
   const w = watch(wish.id);
   const store = storeById(wish.storeId);
-  const sale = w?.onSale && w.lastPrice !== null;
+  const sale = (w?.onSale || w?.hitTarget) && w.lastPrice !== null;
   const off = sale && wish.price ? Math.round((1 - w!.lastPrice! / wish.price) * 100) : 0;
   const price = sale ? money(w!.lastPrice, wish.currency) : money(wish.price, wish.currency);
 
+  const open = () => router.push({ pathname: '/wish/[id]', params: { id: wish.id } });
+  const label = `${wish.name}${sale ? ', price drop' : ''}`;
+
+  // кнопки не вкладываем друг в друга (на вебе это <button> в <button>): фото и подпись открывают вещь, сердечко и ссылка — отдельно
   return (
     <View style={{ gap: 8 }}>
-      <View style={{ height: 168, borderRadius: 18, backgroundColor: t.surface2, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-        {typeof wish.image === 'object' && !wish.image.uri ? (
-          <Icon name="link" size={24} color={t.muted} />
-        ) : (
-          <Image source={wish.image} contentFit="contain" style={{ width: '82%', height: '82%' }} accessible={false} />
-        )}
-        {sale ? (
-          <View style={{ position: 'absolute', top: 10, left: 10, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: t.accent }}>
-            <T size={10} w={600} tracking={0.1} color={t.onAccent}>
-              {off > 0 ? `−${off}%` : 'SALE'}
-            </T>
-          </View>
-        ) : null}
+      <View>
+        <Pressable onPress={open} accessibilityRole="button" accessibilityLabel={label} style={{ height: 168, borderRadius: 18, backgroundColor: t.surface2, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+          {typeof wish.image === 'object' && !wish.image.uri ? (
+            <Icon name="link" size={24} color={t.muted} />
+          ) : (
+            <Image source={wish.image} contentFit="contain" style={{ width: '82%', height: '82%' }} accessible={false} />
+          )}
+          {sale ? (
+            <View style={{ position: 'absolute', top: 10, left: 10, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: t.accent }}>
+              <T size={10} w={600} tracking={0.1} color={t.onAccent}>
+                {w?.hitTarget && !w.onSale ? 'TARGET' : off > 0 ? `−${off}%` : 'SALE'}
+              </T>
+            </View>
+          ) : null}
+        </Pressable>
         <Pressable onPress={() => removeWish(wish.id)} accessibilityRole="button" accessibilityLabel={`Remove ${wish.name} from wishlist`} style={{ position: 'absolute', top: 4, right: 4, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
           <Icon name="heart" size={20} color={t.accent} filled />
         </Pressable>
       </View>
-      <View style={{ gap: 1 }}>
+      <Pressable onPress={open} accessible={false} style={{ gap: 1 }}>
         <T size={14} w={500} numberOfLines={1}>
           {wish.name}
         </T>
@@ -95,21 +101,21 @@ function WishTile({ wish }: { wish: Wish }) {
           <T size={12} color={t.muted} numberOfLines={1} style={{ flexShrink: 1 }}>
             {[store?.name, price].filter(Boolean).join(' · ') || wish.meta}
           </T>
-          {sale && wish.price ? (
+          {sale && w?.onSale && wish.price ? (
             <T size={12} color={t.muted} style={{ textDecorationLine: 'line-through' }}>
               {money(wish.price, wish.currency)}
             </T>
           ) : null}
         </View>
-        {wish.url ? (
-          <Pressable onPress={() => Linking.openURL(wish.url!)} accessibilityRole="link" style={{ flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 32 }}>
-            <Icon name="open" size={14} color={t.text} />
-            <T size={12} w={500}>
-              Open in {store?.name ?? 'store'}
-            </T>
-          </Pressable>
-        ) : null}
-      </View>
+      </Pressable>
+      {wish.url ? (
+        <Pressable onPress={() => Linking.openURL(wish.url!)} accessibilityRole="link" style={{ flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 32 }}>
+          <Icon name="open" size={14} color={t.text} />
+          <T size={12} w={500}>
+            Open in {store?.name ?? 'store'}
+          </T>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

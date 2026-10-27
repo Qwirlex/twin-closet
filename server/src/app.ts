@@ -66,15 +66,17 @@ export function createApp({ store, jobs, meta, watch }: { store: Store; jobs: Jo
     return job ? c.json(job) : c.json({ error: 'No such job' }, 404)
   })
 
-  app.get('/watch', (c) => c.json({ items: watch.list(), meta: meta.configured }))
+  app.get('/watch', (c) => c.json({ items: watch.list(), sales: watch.sales(), meta: meta.configured }))
+
+  app.get('/watch/:id/history', (c) => c.json({ points: watch.history(c.req.param('id')) }))
 
   app.put('/watch', async (c) => {
     const body = (await c.req.json().catch(() => null)) as { items?: WatchInput[] } | null
     if (!Array.isArray(body?.items)) return c.json({ error: 'Send { items: [...] }' }, 400)
     const clean = body.items
       .filter((i) => i && typeof i.id === 'string' && typeof i.storeId === 'string')
-      .map((i) => ({ id: i.id, name: String(i.name ?? ''), storeId: i.storeId, ref: i.ref ?? null, url: i.url ?? null, price: typeof i.price === 'number' ? i.price : null, currency: i.currency ?? null, country: String(i.country ?? 'IE') }))
-    return c.json({ items: watch.put(clean) })
+      .map((i) => ({ id: i.id, name: String(i.name ?? ''), storeId: i.storeId, ref: i.ref ?? null, url: i.url ?? null, price: typeof i.price === 'number' ? i.price : null, currency: i.currency ?? null, country: String(i.country ?? 'IE'), targetPrice: typeof i.targetPrice === 'number' ? i.targetPrice : null }))
+    return c.json({ items: watch.put(clean), sales: watch.sales(), meta: meta.configured })
   })
 
   app.get('/files/:name', (c) => {

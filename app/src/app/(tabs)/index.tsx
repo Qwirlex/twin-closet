@@ -6,6 +6,7 @@ import { Pressable, ScrollView, TextInput, View } from 'react-native';
 
 import { GarmentTile } from '@/components/garments';
 import { WishlistView } from '@/components/wishlist';
+import { Icon } from '@/components/icons';
 import { TabScreen, useFrameWidth } from '@/components/layout';
 import { ArrowDot, Glass, GlassButton, GoldRim, Label, Orb, T, ThemeToggle } from '@/components/ui';
 import { KIND_LABEL } from '@/data/demo';
@@ -20,7 +21,7 @@ export default function ClosetScreen() {
   const [kind, setKind] = useState<GarmentKind | 'all'>('all');
   const [query, setQuery] = useState<string | null>(null);
   const [view, setView] = useState<'closet' | 'wishlist'>('closet');
-  const { wishlist } = useShopping();
+  const { wishlist, freshDrops, dismissDrops } = useShopping();
   const tileW = (useFrameWidth() - 40 - 12) / 2;
 
   const kinds = [...new Set(closet.map((i) => i.kind).filter((k): k is GarmentKind => !!k))];
@@ -50,6 +51,27 @@ export default function ClosetScreen() {
           <ThemeToggle />
         </View>
       </View>
+
+      {freshDrops.length ? (
+        <Pressable
+          onPress={() => {
+            setView('wishlist');
+            dismissDrops();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={`Since you were away: ${freshDrops.length} price drops. Open wishlist`}>
+          <GoldRim radius={18} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingLeft: 14, paddingRight: 10 }}>
+            <Icon name="tag" size={20} color={t.accent} />
+            <View style={{ flex: 1, gap: 2 }}>
+              <Label accent>Since you were away</Label>
+              <T size={14} numberOfLines={2}>
+                {freshDrops.length === 1 ? `${freshDrops[0].name} got cheaper` : `${freshDrops.length} pieces on your wishlist got cheaper`}
+              </T>
+            </View>
+            <Icon name="next" size={18} color={t.muted} />
+          </GoldRim>
+        </Pressable>
+      ) : null}
 
       <View style={{ flexDirection: 'row', gap: 22, borderBottomWidth: 1, borderBottomColor: t.line }} accessibilityRole="tablist">
         {(

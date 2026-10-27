@@ -1,4 +1,4 @@
-import type { Job, JobKind, LookupQuery, SampleName, Upload, WatchItem } from '@twin/shared';
+import type { Job, JobKind, LookupQuery, PricePoint, SampleName, StoreSale, Upload, WatchItem } from '@twin/shared';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
@@ -86,11 +86,22 @@ export function useJob(id: string | null): { job: Job | null; error: string | nu
   return { job, error };
 }
 
-/** Вишлист для слежки за ценой: сервер хранит только вещи живых магазинов */
-export async function putWatch(items: Omit<WatchItem, 'lastPrice' | 'onSale' | 'checkedAt'>[]): Promise<WatchItem[]> {
-  return (await call<{ items: WatchItem[] }>('/watch', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ items }) })).items;
+/** Ответ сервера цен: вещи с последними проверками, распродажи по магазинам, есть ли ключ Meta */
+export interface WatchState {
+  items: WatchItem[];
+  sales: StoreSale[];
+  meta: boolean;
 }
 
-export async function getWatch(): Promise<WatchItem[]> {
-  return (await call<{ items: WatchItem[] }>('/watch')).items;
+/** Вишлист для слежки за ценой: сервер хранит только вещи живых магазинов */
+export function putWatch(items: (Pick<WatchItem, 'id' | 'name' | 'storeId' | 'ref' | 'url' | 'price' | 'currency' | 'country' | 'targetPrice'>)[]): Promise<WatchState> {
+  return call('/watch', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ items }) });
+}
+
+export function getWatch(): Promise<WatchState> {
+  return call('/watch');
+}
+
+export async function getPriceHistory(id: string): Promise<PricePoint[]> {
+  return (await call<{ points: PricePoint[] }>(`/watch/${encodeURIComponent(id)}/history`)).points;
 }

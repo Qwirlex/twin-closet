@@ -2,13 +2,17 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { Job, Upload, WatchItem } from '@twin/shared'
+import type { Job, PricePoint, StoreSale, Upload, WatchItem } from '@twin/shared'
 
 interface Db {
   uploads: Upload[]
   jobs: Job[]
   /** вишлист для слежки за ценой */
   watch: WatchItem[]
+  /** все проверки цен (90 дней) */
+  prices: PricePoint[]
+  /** распродажи по магазинам и странам */
+  sales: StoreSale[]
 }
 
 export class Store {
@@ -20,7 +24,7 @@ export class Store {
     this.files = join(dir, 'files')
     mkdirSync(this.files, { recursive: true })
     this.dbPath = join(dir, 'db.json')
-    this.db = { uploads: [], jobs: [], watch: [], ...(existsSync(this.dbPath) ? (JSON.parse(readFileSync(this.dbPath, 'utf8')) as Partial<Db>) : {}) }
+    this.db = { uploads: [], jobs: [], watch: [], prices: [], sales: [], ...(existsSync(this.dbPath) ? (JSON.parse(readFileSync(this.dbPath, 'utf8')) as Partial<Db>) : {}) }
     // задачи, которые шли во время перезапуска, уже не доедут
     for (const j of this.db.jobs) if (j.status === 'queued' || j.status === 'running') Object.assign(j, { status: 'failed', error: 'Сервер перезапустился во время задачи', errorCode: 'internal' })
   }
@@ -73,6 +77,26 @@ export class Store {
 
   setWatch(items: WatchItem[]): void {
     this.db.watch = items
+    this.save()
+  }
+
+  prices(itemId?: string): PricePoint[] {
+    return itemId ? this.db.prices.filter((p) => p.itemId === itemId) : this.db.prices
+  }
+
+  /** Добавляет проверку и забывает проверки старше 90 дней */
+  addPrice(point: PricePoint): void {
+    const cutoff = Date.parse(point.checkedAt) - 90 * 86_400_000
+    this.db.prices = [...this.db.prices.filter((p) => Date.parse(p.checkedAt) >= cutoff), point]
+    this.save()
+  }
+
+  sales(): StoreSale[] {
+    return this.db.sales
+  }
+
+  setSale(sale: StoreSale): void {
+    this.db.sales = [...this.db.sales.filter((s) => !(s.storeId === sale.storeId && s.country === sale.country)), sale]
     this.save()
   }
 

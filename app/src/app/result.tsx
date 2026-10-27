@@ -10,6 +10,7 @@ import { Icon } from '@/components/icons';
 import { useFrameWidth } from '@/components/layout';
 import { Cta, Glass, GlassButton, GoldRim, Label, PhotoChip, T } from '@/components/ui';
 import { ANGLES, LOOKS, ME, OWN_LOOKS, type Item } from '@/data/demo';
+import { money, useShopping } from '@/lib/shopping';
 import { useStore } from '@/lib/store';
 import { useTheme } from '@/theme/theme';
 import { PHOTO_GLASS } from '@/theme/tokens';
@@ -26,6 +27,7 @@ export default function ResultScreen() {
   const [index, setIndex] = useState(() => Math.max(0, looks.findIndex((l) => l.id === lookParam)));
   const [angle, setAngle] = useState(0);
   const [hint, setHint] = useState<string | null>(null);
+  const { wishlist, watch } = useShopping();
 
   const look = looks[index] ?? LOOKS[0];
   const angleKey = ANGLES[angle].key;
@@ -36,6 +38,10 @@ export default function ResultScreen() {
   const saved = savedIds.includes(look.id);
   const prices = fresh.map((p) => p.shop?.price).filter((p): p is number => typeof p === 'number');
   const urls = fresh.map((p) => p.shop?.url).filter((u): u is string => !!u);
+
+  // вещи образа из вишлиста, которые подешевели (подтверждено сервером цен)
+  const cheaper = wishlist.filter((w) => look.itemIds.includes(w.id) && watch(w.id)?.onSale && w.price !== null && watch(w.id)!.lastPrice !== null);
+  const saving = cheaper.reduce((sum, w) => sum + (w.price! - watch(w.id)!.lastPrice!), 0);
 
   const step = (d: number) => {
     setIndex((i) => (i + d + looks.length) % looks.length);
@@ -95,6 +101,15 @@ export default function ResultScreen() {
             {look.note}
           </T>
         </View>
+
+        {cheaper.length ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} accessibilityLiveRegion="polite">
+            <Icon name="tag" size={16} color={t.accent} />
+            <T size={14} color={t.accent} style={{ flex: 1 }}>
+              This look is {money(saving, cheaper[0].currency)} cheaper now: {list(cheaper.map((c) => c.name.toLowerCase()))} on sale.
+            </T>
+          </View>
+        ) : null}
 
         <GoldRim radius={18} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 11, paddingHorizontal: 13 }}>
           {similar.length ? <SimilarFan items={similar} /> : null}

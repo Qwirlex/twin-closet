@@ -12,7 +12,7 @@ const root = join(import.meta.dirname, '..')
 const meta = new MetaApi(process.env.MODEL_API_KEY ?? '')
 const store = new Store(process.env.DATA_DIR ?? join(root, 'data'))
 const jobs = new Jobs(store, meta, join(root, 'samples'))
-const watch = new PriceWatch(store, jobs, meta)
+const watch = new PriceWatch(store, meta, PriceWatch.jobSearch(jobs))
 const app = createApp({ store, jobs, meta, watch })
 watch.schedule()
 
