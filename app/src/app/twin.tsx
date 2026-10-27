@@ -49,7 +49,7 @@ function replyTo(text: string): Message[] {
 export default function TwinScreen() {
   const { t } = useTheme();
   const insets = useSafeAreaInsets();
-  const { addToTryOn } = useStore();
+  const { importAsset } = useStore();
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const nextId = useRef(1);
   const [messages, setMessages] = useState<Message[]>([{ id: 0, from: 'twin', text: 'Hi, I know your closet and the pieces you are eyeing. Tell me the plan and I will put an outfit together.' }]);
@@ -81,9 +81,8 @@ export default function TwinScreen() {
   const attach = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9 });
     if (res.canceled || !res.assets[0]) return;
-    const image = { uri: res.assets[0].uri };
-    addToTryOn({ id: `new-${Date.now()}`, name: 'From Twin chat', meta: 'Cut-out and tags come from the Meta models', kind: null, image, via: 'Screenshot', pending: true, shop: { price: null, url: null } });
-    push({ id: 0, from: 'me', image }, { id: 0, from: 'twin', text: 'Added it to your try-on. Once the Meta key is connected I cut it out and style it with your closet.' });
+    importAsset(res.assets[0], 'Screenshot');
+    push({ id: 0, from: 'me', image: { uri: res.assets[0].uri } }, { id: 0, from: 'twin', text: 'Added it to your try-on. Open Try on to see it being cut out and read.' });
   };
 
   const toggleMic = () => {

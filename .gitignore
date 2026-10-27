@@ -6,3 +6,5 @@ dist/
 app/ios/
 app/android/
 data/
+server/samples/*
+!server/samples/README.md

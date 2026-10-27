@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Glass, Label, PhotoChip, T, Cta } from '@/components/ui';
@@ -22,7 +22,8 @@ export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState(0);
   const last = step === COPY.length - 1;
-  const heroH = 486 + insets.top - 20;
+  // на низких экранах (iPhone SE) картинка ниже, чтобы текст и кнопки влезли без прокрутки
+  const heroH = Math.min(486, Math.round(useWindowDimensions().height * 0.56)) + insets.top - 20;
 
   return (
     <View style={{ flex: 1, backgroundColor: t.bg, gap: 26 }}>

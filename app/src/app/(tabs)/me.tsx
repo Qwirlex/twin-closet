@@ -54,8 +54,8 @@ export default function MeScreen() {
           style={{ position: 'absolute', top: 0, left: (heroW - photoW) / 2, width: photoW, height: heroH }}
           accessibilityLabel={`Your body scan, ${ANGLES[angle].label} view`}
         />
-        <LinearGradient pointerEvents="none" colors={[PHOTO_BG, CLEAR]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ position: 'absolute', top: 0, bottom: 0, left: (heroW - photoW) / 2, width: photoW * 0.14 }} />
-        <LinearGradient pointerEvents="none" colors={[CLEAR, PHOTO_BG]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ position: 'absolute', top: 0, bottom: 0, right: (heroW - photoW) / 2, width: photoW * 0.14 }} />
+        <LinearGradient pointerEvents="none" colors={[PHOTO_BG, CLEAR]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ position: 'absolute', top: 0, bottom: 0, left: (heroW - photoW) / 2 - 1, width: photoW * 0.14 + 1 }} />
+        <LinearGradient pointerEvents="none" colors={[CLEAR, PHOTO_BG]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ position: 'absolute', top: 0, bottom: 0, right: (heroW - photoW) / 2 - 1, width: photoW * 0.14 + 1 }} />
         <LinearGradient pointerEvents="none" colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.45)']} style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 90 }} />
         <PhotoChip style={{ position: 'absolute', right: 14, top: 14 }}>{ANGLES[angle].label}</PhotoChip>
         <PhotoChip icon="lock" style={{ position: 'absolute', left: 14, bottom: 14, paddingVertical: 7 }}>

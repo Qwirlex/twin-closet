@@ -49,8 +49,21 @@ export interface SimilarOwned {
 }
 
 /** Долгие задачи: скан шкафа, скан себя, примерка */
-export type JobKind = 'closet_scan' | 'body_scan' | 'import_item' | 'try_on'
+export const JOB_KINDS = ['closet_scan', 'body_scan', 'import_item', 'try_on'] as const
+export type JobKind = (typeof JOB_KINDS)[number]
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed'
+
+/** Шаги задачи — экран прогресса показывает их списком с галочками */
+export interface JobStep {
+  key: string
+  label: string
+  /** какая модель Meta делает шаг (для подписи и README) */
+  model: 'SAM 3.1' | 'Muse Spark' | 'Muse Image' | null
+  status: 'pending' | 'running' | 'done' | 'failed'
+}
+
+/** no_key — на сервере нет ключа Meta: всё до моделей сделано, дальше ждём ключ */
+export type JobErrorCode = 'no_key' | 'bad_input' | 'model' | 'internal'
 
 export interface Job {
   id: string
@@ -58,6 +71,50 @@ export interface Job {
   status: JobStatus
   /** «нашёл 12 вещей…» — показывается на экране прогресса */
   progress: string
+  /** 0..1 */
+  percent: number
+  steps: JobStep[]
   error: string | null
+  errorCode: JobErrorCode | null
+  /** что уже получилось (даже если задача упала на шаге моделей) */
+  result: JobResult
+  /** задача по готовому видео — результат кэшируется и переиспользуется */
+  sample: SampleName | null
+  createdAt: string
+  updatedAt: string
+}
+
+/** Откуда взять видео или фото для задачи */
+export type JobInput = { uploadId: string } | { sample: SampleName }
+
+export const SAMPLES = ['closet', 'body', 'item'] as const
+export type SampleName = (typeof SAMPLES)[number]
+
+export interface MediaInfo {
+  kind: 'image' | 'video'
+  width: number
+  height: number
+  /** секунды, для видео */
+  duration: number | null
+  frames: number | null
+}
+
+export interface JobResult {
+  media?: MediaInfo
+  /** ключевые кадры, которые увидит Muse Spark */
+  keyframes?: string[]
+  garments?: Garment[]
+  body?: BodyPhoto[]
+  item?: Garment
+  similar?: SimilarOwned[]
+}
+
+export interface Upload {
+  id: string
+  kind: 'image' | 'video'
+  name: string
+  mime: string
+  size: number
+  url: string
   createdAt: string
 }

@@ -1,7 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, TextInput, View } from 'react-native';
 
 import { Thumb } from '@/components/garments';
 import { Icon, type IconName } from '@/components/icons';
@@ -18,14 +18,16 @@ const SOURCES: { key: NonNullable<Item['via']>; label: string; sub: string; icon
   { key: 'Link', label: 'Link', sub: 'Paste a product URL', icon: 'link' },
 ];
 
-/** Новая вещь до разбора: вырезку, вид, бренд и цену сделают SAM 3.1 и Muse Spark */
-function pendingItem(via: NonNullable<Item['via']>, image: Item['image'], name: string): Item {
-  return { id: `new-${Date.now()}`, name, meta: 'Cut-out and tags come from the Meta models', kind: null, image, via, pending: true, shop: { price: null, url: null } };
+/** Ссылка на товар: страницу прочитает Muse Spark (у него есть веб-поиск), пока ждёт ключ */
+function linkItem(url: string, host: string): Item {
+  return { id: `new-${Date.now()}`, name: host, meta: 'Muse Spark reads the product page once the Meta key is connected', kind: null, image: { uri: '' }, via: 'Link', pending: true, stage: 'waiting', shop: { price: null, url } };
 }
+
+const STAGE: Record<NonNullable<Item['stage']>, string> = { uploading: 'uploading', working: 'reading', waiting: 'needs Meta key', failed: 'could not read' };
 
 export default function TryScreen() {
   const { t } = useTheme();
-  const { tryOn, addToTryOn, removeFromTryOn, looksForTryOn } = useStore();
+  const { tryOn, addToTryOn, importAsset, removeFromTryOn, looksForTryOn } = useStore();
   const [linkOpen, setLinkOpen] = useState(false);
   const [link, setLink] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +48,7 @@ export default function TryScreen() {
     }
     const res = via === 'Screenshot' ? await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9 }) : await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.9 });
     if (res.canceled || !res.assets[0]) return;
-    addToTryOn(pendingItem(via, { uri: res.assets[0].uri }, via === 'Screenshot' ? 'New screenshot' : 'New in-store photo'));
+    importAsset(res.assets[0], via);
   }
 
   function addLink() {
@@ -57,7 +59,7 @@ export default function TryScreen() {
       setError('That does not look like a link. Copy the product URL from the store and paste it here.');
       return;
     }
-    addToTryOn({ ...pendingItem('Link', { uri: '' }, host), shop: { price: null, url: link.trim() } });
+    addToTryOn(linkItem(link.trim(), host));
     setLink('');
     setLinkOpen(false);
     setError(null);
@@ -148,9 +150,10 @@ export default function TryScreen() {
               <T size={13} color={t.muted} numberOfLines={2}>
                 {it.meta}
               </T>
-              <View style={{ alignSelf: 'flex-start', marginTop: 2, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999, borderWidth: 1, borderColor: it.pending ? t.accent : t.line }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 2, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999, borderWidth: 1, borderColor: it.pending ? t.accent : t.line }}>
+                {it.stage === 'uploading' || it.stage === 'working' ? <ActivityIndicator size="small" color={t.accent} style={{ transform: [{ scale: 0.6 }], width: 12, height: 12 }} /> : null}
                 <T size={11} color={it.pending ? t.accent : t.muted}>
-                  {it.pending ? `${it.via} · waiting for cut-out` : it.via}
+                  {it.pending && it.stage ? `${it.via} · ${STAGE[it.stage]}` : it.via}
                 </T>
               </View>
             </View>

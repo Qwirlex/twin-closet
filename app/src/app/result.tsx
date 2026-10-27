@@ -53,7 +53,7 @@ export default function ResultScreen() {
       <CompareRender
         key={look.id}
         width={width}
-        top={insets.top + 36}
+        top={insets.top + 56}
         before={ME[angleKey]}
         after={after}
         overlay={
@@ -109,7 +109,7 @@ export default function ResultScreen() {
         {fresh.length ? (
           <Cta
             title={`Buy ${fresh.length} new ${fresh.length === 1 ? 'piece' : 'pieces'}`}
-            sub={prices.length ? `€${prices.reduce((a, b) => a + b, 0).toFixed(2)} · ${fresh.length} ${fresh.length === 1 ? 'store' : 'stores'}` : `${fresh.map((p) => p.via?.toLowerCase()).join(' + ')}`}
+            sub={prices.length ? `€${prices.reduce((a, b) => a + b, 0).toFixed(2)} · ${fresh.length} ${fresh.length === 1 ? 'store' : 'stores'}` : 'Demo pieces · no store links yet'}
             onPress={() => {
               if (urls[0]) Linking.openURL(urls[0]);
               else setHint('Demo pieces have no store link. Add a product link or a screenshot with a price and the button opens the store.');

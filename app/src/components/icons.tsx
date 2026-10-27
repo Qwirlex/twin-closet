@@ -32,6 +32,10 @@ export const ICONS = {
   link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1 M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
   mail: 'M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z M3 7l9 6 9-6',
   send: 'M5 12h14M13 6l6 6-6 6',
+  check: 'M5 12.5l4.5 4.5L19 7.5',
+  upload: 'M12 16V4M7 9l5-5 5 5M5 20h14',
+  film: 'M4 5h16v14H4z M8 5v14M16 5v14M4 9h4M4 15h4M16 9h4M16 15h4',
+  video: 'M4 7h11v10H4z M15 10.5l5-3v9l-5-3',
 } as const;
 
 export type IconName = keyof typeof ICONS | 'lock' | 'dots';
