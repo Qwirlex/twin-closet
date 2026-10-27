@@ -45,6 +45,10 @@ export class Store {
     return u
   }
 
+  uploads(): Upload[] {
+    return this.db.uploads
+  }
+
   upload(id: string): Upload | undefined {
     return this.db.uploads.find((u) => u.id === id)
   }
@@ -98,6 +102,16 @@ export class Store {
   setSale(sale: StoreSale): void {
     this.db.sales = [...this.db.sales.filter((s) => !(s.storeId === sale.storeId && s.country === sale.country)), sale]
     this.save()
+  }
+
+  /** Убирает записи загрузок и задач, для которых keep вернул false */
+  prune(keepUpload: (u: Upload) => boolean, keepJob: (j: Job) => boolean): { uploads: Upload[]; jobs: Job[] } {
+    const uploads = this.db.uploads.filter((u) => !keepUpload(u))
+    const jobs = this.db.jobs.filter((j) => !keepJob(j))
+    this.db.uploads = this.db.uploads.filter(keepUpload)
+    this.db.jobs = this.db.jobs.filter(keepJob)
+    if (uploads.length || jobs.length) this.save()
+    return { uploads, jobs }
   }
 
   private save(): void {

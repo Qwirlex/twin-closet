@@ -10,6 +10,7 @@ import { Store } from '../src/store'
 import { applyCheck, blackFriday, dueForCheck, lowest30, PriceWatch, saleSeason, sameItem, type Search } from '../src/watch'
 
 const HOUR = 3_600_000
+const DEV = { 'x-twin-device': 'device-one' }
 const item: WatchItem = {
   id: 'w1', name: 'Wide-leg jeans', storeId: 'zara', ref: '1234/567/800', url: null, price: 39.95, currency: 'EUR', country: 'IE',
   targetPrice: null, lastPrice: null, onSale: false, hitTarget: false, pendingPrice: null, lowest30: null, source: null, checkedAt: null
@@ -87,36 +88,51 @@ describe('how often to check', () => {
 describe('price watch on the server', () => {
   it('keeps only live stores, remembers checks and accepts a target price', async () => {
     const { app, store } = setup()
-    const put = (items: object[]) => app.request('/watch', { method: 'PUT', body: JSON.stringify({ items }), headers: { 'content-type': 'application/json' } })
+    const put = (items: object[]) => app.request('/watch', { method: 'PUT', body: JSON.stringify({ items }), headers: { 'content-type': 'application/json', ...DEV } })
     const mango = { ...item, id: 'w2', storeId: 'mango' }
     expect((await (await put([item, mango])).json()).items.map((i: WatchItem) => i.id)).toEqual(['w1'])
     store.setWatch(store.watch().map((w) => ({ ...w, lastPrice: 29.95, onSale: true, checkedAt: 'x' })))
     await put([{ ...item, name: 'Wide-leg jeans, light', targetPrice: 30 }])
-    const { items } = (await (await app.request('/watch')).json()) as { items: WatchItem[] }
+    const { items } = (await (await app.request('/watch', { headers: DEV })).json()) as { items: WatchItem[] }
     expect(items[0]).toMatchObject({ name: 'Wide-leg jeans, light', lastPrice: 29.95, onSale: true, targetPrice: 30, hitTarget: true })
+  })
+
+  it('every device has its own wishlist; a request without a device id is refused', async () => {
+    const { app } = setup()
+    const put = (device: string, items: object[]) => app.request('/watch', { method: 'PUT', body: JSON.stringify({ items }), headers: { 'content-type': 'application/json', 'x-twin-device': device } })
+    await put('device-one', [item])
+    await put('device-two', [{ ...item, name: 'Other jeans' }])
+    await put('device-two', [{ ...item, name: 'Other jeans' }, { ...item, id: 'w9', name: 'Coat' }])
+    const one = (await (await app.request('/watch', { headers: { 'x-twin-device': 'device-one' } })).json()) as { items: WatchItem[] }
+    const two = (await (await app.request('/watch', { headers: { 'x-twin-device': 'device-two' } })).json()) as { items: WatchItem[] }
+    expect(one.items.map((i) => i.name)).toEqual(['Wide-leg jeans'])
+    expect(two.items.map((i) => i.name)).toEqual(['Other jeans', 'Coat'])
+    expect(JSON.stringify(one)).not.toContain('owner')
+    expect((await app.request('/watch')).status).toBe(400)
+    expect((await app.request('/watch', { headers: { 'x-twin-device': '../x' } })).status).toBe(400)
   })
 
   it('without the Meta key nothing is searched', async () => {
     const { watch } = setup({ product: async () => hit(1) })
-    watch.put([item])
+    watch.put('device-one', [item])
     expect(await watch.tick()).toEqual({ checked: 0, sales: 0, skipped: 'no_key' })
   })
 
   it('a full pass: store sale first, then items that are due, confirmed an hour later', async () => {
     let price = 29.95
     const { watch, app } = setup({ product: async () => hit(price), storeSale: async () => ({ onSale: true, source: 'https://www.zara.com/ie/' }) }, 'test-key')
-    watch.put([item])
+    watch.put('device-one', [item])
     const t0 = at('2026-12-27T09:00:00Z')
     expect(await watch.tick(t0)).toEqual({ checked: 1, sales: 1 })
-    expect(watch.list()[0]).toMatchObject({ pendingPrice: 29.95, onSale: false })
+    expect(watch.list('device-one')[0]).toMatchObject({ pendingPrice: 29.95, onSale: false })
     expect(await watch.tick(new Date(t0.getTime() + 30 * 60_000))).toEqual({ checked: 0, sales: 0 })
     await watch.tick(new Date(t0.getTime() + HOUR))
-    expect(watch.list()[0]).toMatchObject({ onSale: true, lastPrice: 29.95 })
-    const { points } = await (await app.request('/watch/w1/history')).json()
+    expect(watch.list('device-one')[0]).toMatchObject({ onSale: true, lastPrice: 29.95 })
+    const { points } = await (await app.request('/watch/w1/history', { headers: DEV })).json()
     expect(points).toHaveLength(2)
     price = 39.95
     await watch.tick(new Date(t0.getTime() + 25 * HOUR))
-    expect(watch.list()[0]).toMatchObject({ onSale: false, lastPrice: 39.95 })
+    expect(watch.list('device-one')[0]).toMatchObject({ onSale: false, lastPrice: 39.95 })
   })
 })
 

@@ -3,6 +3,7 @@ import { serve } from '@hono/node-server'
 import { networkInterfaces } from 'node:os'
 import { join } from 'node:path'
 import { createApp } from './app'
+import { scheduleCleanup } from './cleanup'
 import { Jobs } from './jobs'
 import { MetaApi } from './meta'
 import { Store } from './store'
@@ -15,6 +16,7 @@ const jobs = new Jobs(store, meta, join(root, 'samples'))
 const watch = new PriceWatch(store, meta, PriceWatch.jobSearch(jobs, meta))
 const app = createApp({ store, jobs, meta, watch })
 watch.schedule()
+scheduleCleanup(store)
 
 const port = Number(process.env.PORT ?? 8787)
 serve({ fetch: app.fetch, port, hostname: '0.0.0.0' }, () => {

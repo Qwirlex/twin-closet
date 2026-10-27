@@ -178,6 +178,15 @@ Twin, собирая образ «на ужин в пятницу», берёт 
 - **APK для Android** и Expo Go для iPhone. App Store не нужен: проверка Apple длится дольше хакатона.
 - **README** со схемой: какая модель Meta что делает (это 25% оценки — показываем явно).
 
+### Выкладка для судей (подготовлено 27.10)
+
+- Веб: `npm run build:web -w @twin/app` (адрес сервера — только из `TWIN_API_URL=https://…`, локальные .env не читаются),
+  папка для Vercel — `deploy/twin-closet` с `vercel.json` (все пути → `index.html`). Выкладка — `vercel deploy deploy/twin-closet --prod`
+  (публичная страница — нужно «да» пользователя).
+- Сервер: нужен постоянный https-адрес. Варианты: туннель Cloudflare с этого компьютера (поставить `cloudflared`),
+  или VPS/Render/Fly с ffmpeg (Node 22, `npm run start -w @twin/server`, папка `server/data` на диске). Решает пользователь.
+- Лимиты против трат: `LIMIT_UPLOADS_PER_HOUR`, `LIMIT_JOBS_PER_DAY`, `LIMIT_JOBS_PER_DAY_TOTAL` (по умолчанию 30 / 40 / 600).
+
 ### Путь судьи в веб-версии (снимать ничего не нужно)
 
 Судья смотрит с ноутбука, камеры и шкафа у него под рукой нет. Поэтому каждый шаг, где в приложении нужна

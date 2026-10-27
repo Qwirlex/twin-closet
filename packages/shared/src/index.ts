@@ -154,6 +154,8 @@ export interface ProductHit {
 /** Вещь в вишлисте, которую сервер проверяет на скидку */
 export interface WatchItem {
   id: string
+  /** устройство, чей это вишлист (у каждого посетителя — свой); сервер не отдаёт чужие */
+  owner?: string
   name: string
   storeId: string
   ref: string | null

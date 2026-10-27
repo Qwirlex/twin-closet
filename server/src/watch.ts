@@ -19,6 +19,9 @@ export interface Search {
   storeSale(storeId: string, country: string): Promise<{ onSale: boolean; source: string | null }>
 }
 
+/** Ключ вещи на сервере: у разных устройств могут быть вещи с одним id */
+const key = (w: { owner?: string; id: string }) => `${w.owner ?? ''}:${w.id}`
+
 const isLive = (id: string): id is (typeof LIVE_STORE_IDS)[number] => (LIVE_STORE_IDS as readonly string[]).includes(id)
 
 /** Страница того же магазина (zara.com, www.zara.com/ie/en/…) */
@@ -138,21 +141,25 @@ export class PriceWatch {
     }
   }
 
-  list(): WatchItem[] {
-    return this.store.watch()
+  /** Вишлист одного устройства (без поля owner — его знает только сервер) */
+  list(owner: string): WatchItem[] {
+    return this.store
+      .watch()
+      .filter((w) => w.owner === owner)
+      .map(({ owner: _o, ...w }) => w)
   }
 
-  history(itemId: string): PricePoint[] {
-    return this.store.prices(itemId)
+  history(owner: string, itemId: string): PricePoint[] {
+    return this.store.prices(key({ owner, id: itemId }))
   }
 
   sales(): StoreSale[] {
     return this.store.sales()
   }
 
-  /** Заменяет список вишлиста. Берём только живые магазины; прошлые проверки сохраняются */
-  put(items: WatchInput[]): WatchItem[] {
-    const prev = new Map(this.store.watch().map((w) => [w.id, w]))
+  /** Заменяет вишлист этого устройства (чужие не трогает). Берём только живые магазины; прошлые проверки сохраняются */
+  put(owner: string, items: WatchInput[]): WatchItem[] {
+    const prev = new Map(this.store.watch().filter((w) => w.owner === owner).map((w) => [w.id, w]))
     const next = items
       .filter((i) => isLive(i.storeId) && (i.ref || i.url || i.name))
       .slice(0, 200)
@@ -161,6 +168,7 @@ export class PriceWatch {
         const targetPrice = typeof i.targetPrice === 'number' && i.targetPrice > 0 ? i.targetPrice : null
         return {
           ...i,
+          owner,
           targetPrice,
           lastPrice: old?.lastPrice ?? null,
           onSale: old?.onSale ?? false,
@@ -172,8 +180,8 @@ export class PriceWatch {
           checkedAt: old?.checkedAt ?? null
         }
       })
-    this.store.setWatch(next)
-    return next
+    this.store.setWatch([...this.store.watch().filter((w) => w.owner !== owner), ...next])
+    return this.list(owner)
   }
 
   /** Один проход: распродажи по магазинам (раз в ~сутки), затем вещи, которым пора. Без ключа Meta — пропуск */
@@ -197,9 +205,10 @@ export class PriceWatch {
       const sale = this.store.sales().find((s) => s.storeId === item.storeId && s.country === item.country)
       if (!dueForCheck(item, sale, now)) continue
       const hit = await this.search.product(item).catch(() => null)
-      const { item: next, point } = applyCheck(item, hit, this.store.prices(item.id), now)
-      if (point) this.store.addPrice(point)
-      this.store.setWatch(this.store.watch().map((w) => (w.id === item.id ? next : w)))
+      const k = key(item)
+      const { item: next, point } = applyCheck(item, hit, this.store.prices(k), now)
+      if (point) this.store.addPrice({ ...point, itemId: k })
+      this.store.setWatch(this.store.watch().map((w) => (key(w) === k ? next : w)))
       checked++
     }
     return { checked, sales }

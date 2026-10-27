@@ -3,6 +3,8 @@ import type { ImagePickerAsset } from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 
+import { deviceId } from '@/lib/device';
+
 // Адрес сервера: EXPO_PUBLIC_API_URL (app/.env.local на телефоне — IP компьютера в Wi-Fi; в сборке для судей — из TWIN_API_URL).
 // В сборке без адреса не идём на localhost посетителя: демо-аккаунт работает, сканы и примерка честно ждут сервер
 export const API_URL = process.env.EXPO_PUBLIC_API_URL || (__DEV__ ? 'http://localhost:8787' : '');
@@ -13,7 +15,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   if (!API_URL) throw new ApiError('The live demo server is offline right now. The demo account works; scans and try-ons need the server.');
   let res: Response;
   try {
-    res = await fetch(`${API_URL}${path}`, init);
+    res = await fetch(`${API_URL}${path}`, { ...init, headers: { ...(init?.headers as Record<string, string> | undefined), 'x-twin-device': deviceId() } });
   } catch {
     throw new ApiError('Cannot reach the Twin Closet server. Check that it is running and the phone is on the same Wi-Fi.');
   }
