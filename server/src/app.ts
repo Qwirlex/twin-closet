@@ -25,8 +25,13 @@ const TYPES: Record<string, { kind: Upload['kind']; ext: string }> = {
 
 const MIME: Record<string, string> = { '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm' }
 
-/** Адрес клиента: за туннелем или прокси — из x-forwarded-for */
+/**
+ * Адрес клиента для лимитов. На Fly — из Fly-Client-IP: его ставит прокси Fly, подделать нельзя
+ * (x-forwarded-for клиент может прислать свой). За другим прокси — первый адрес x-forwarded-for
+ */
 function clientIp(c: Context): string {
+  const fly = c.req.header('fly-client-ip')?.trim()
+  if (fly) return fly
   const fwd = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
   if (fwd) return fwd
   try {

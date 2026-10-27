@@ -1,0 +1,21 @@
+# В образ сервера — только манифесты, server и packages/shared
+**/node_modules
+.git
+.expo
+dist-web
+deploy
+supabase
+docs
+*.log
+**/.env
+**/.env.*
+!**/.env.example
+
+# приложение не нужно, кроме манифеста для рабочих областей npm
+app/*
+!app/package.json
+
+# данные и тесты сервера в образ не идут; готовые видео для судей (server/samples) — идут
+server/data
+server/test
+server/scripts

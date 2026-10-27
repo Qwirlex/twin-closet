@@ -1,0 +1,40 @@
+# Сервер Twin Closet на Fly.io (PLAN.md, «Выкладка для судей»).
+# Имя приложения должно быть свободно во всём Fly — если занято, fly launch предложит другое.
+app = 'twin-closet-api'
+primary_region = 'lhr'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[env]
+  NODE_ENV = 'production'
+  PORT = '8787'
+  DATA_DIR = '/data'
+  RETAIN_HOURS = '48'
+  LIMIT_UPLOADS_PER_HOUR = '30'
+  LIMIT_JOBS_PER_DAY = '40'
+  LIMIT_JOBS_PER_DAY_TOTAL = '600'
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  # судья не должен попасть на «спящий» сервер: всегда одна машина
+  auto_stop_machines = 'off'
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = '30s'
+    interval = '30s'
+    method = 'GET'
+    path = '/health'
+    timeout = '5s'
+
+# база задач, загрузки и кэш образцов — на диске, переживают перезапуск
+[[mounts]]
+  source = 'twin_data'
+  destination = '/data'
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '1gb'
