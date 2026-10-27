@@ -22,8 +22,13 @@
       "package": "com.watershow.twincloset"
     },
     "web": {
-      "output": "server",
-      "favicon": "./assets/images/favicon.png"
+      "output": "single",
+      "favicon": "./assets/images/favicon.png",
+      "name": "Twin Closet",
+      "shortName": "Twin Closet",
+      "description": "See any piece on your real body, styled with what you already own.",
+      "themeColor": "#0B0B0C",
+      "backgroundColor": "#0B0B0C"
     },
     "plugins": [
       "expo-router",

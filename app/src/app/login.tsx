@@ -4,14 +4,14 @@ import { router } from 'expo-router';
 import { Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppleIcon, GoogleIcon, Icon, LogoMark } from '@/components/icons';
+import { Icon, LogoMark } from '@/components/icons';
 import { Glass, T } from '@/components/ui';
 import { HERO_LOGIN } from '@/data/demo';
 import { useStore } from '@/lib/store';
 import { useTheme } from '@/theme/theme';
 import { PHOTO_GLASS } from '@/theme/tokens';
 
-// Вход: Apple, Google, почта (Supabase Auth подключим позже — пока все кнопки открывают демо-аккаунт)
+// Вход: пока только демо-аккаунт (честно — кнопки Apple/Google без настоящего входа не показываем). Аккаунты — Supabase Auth
 
 export default function LoginScreen() {
   const { t } = useTheme();
@@ -60,28 +60,14 @@ export default function LoginScreen() {
 
         <View style={{ gap: 10 }}>
           <Pressable onPress={enter} accessibilityRole="button" style={({ pressed }) => ({ minHeight: 56, borderRadius: 999, backgroundColor: t.ctaBg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, opacity: pressed ? 0.85 : 1 })}>
-            <AppleIcon color={t.ctaText} />
             <T size={16} w={500} color={t.ctaText}>
-              Continue with Apple
+              Explore the demo account
             </T>
+            <Icon name="arrow" size={18} color={t.ctaText} stroke={1.8} />
           </Pressable>
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            {(
-              [
-                ['Google', <GoogleIcon key="g" color={glass.text} />],
-                ['Email', <Icon key="m" name="mail" size={18} color={glass.text} />],
-              ] as const
-            ).map(([label, icon]) => (
-              <Pressable key={label} onPress={enter} accessibilityRole="button" accessibilityLabel={`Continue with ${label}`} style={{ flex: 1 }}>
-                <Glass tokens={glass} style={{ minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                  {icon}
-                  <T size={16} w={500} color={glass.text}>
-                    {label}
-                  </T>
-                </Glass>
-              </Pressable>
-            ))}
-          </View>
+          <T size={13} color={sub} lh={1.45} style={{ textAlign: 'center' }}>
+            A closet, a body scan and two pieces to try are ready. No sign-up.
+          </T>
         </View>
 
         <View style={{ gap: 8 }}>
@@ -93,9 +79,6 @@ export default function LoginScreen() {
               Your body scan and photos stay private to you.
             </T>
           </View>
-          <T size={12} color={sub} lh={1.5}>
-            By continuing you agree to the Terms and Privacy Policy.
-          </T>
         </View>
       </View>
     </View>

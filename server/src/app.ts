@@ -1,12 +1,14 @@
 // HTTP API: загрузки, задачи, файлы. Отдельно от запуска сервера — чтобы гонять в тестах через app.request
 import { JOB_KINDS, SAMPLES, type JobInput, type JobKind, type LookupQuery, type SampleName, type Upload } from '@twin/shared'
-import { Hono } from 'hono'
+import { getConnInfo } from '@hono/node-server/conninfo'
+import { Hono, type Context } from 'hono'
 import { cors } from 'hono/cors'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { extname } from 'node:path'
 import { JobError, type Jobs } from './jobs'
 import type { MetaApi } from './meta'
 import type { Store } from './store'
+import { Limits, limitsFromEnv, type LimitKind } from './limits'
 import type { PriceWatch, WatchInput } from './watch'
 
 /** Видео шкафа на 30 секунд с телефона — до ~150 MB; больше не принимаем */
@@ -23,13 +25,31 @@ const TYPES: Record<string, { kind: Upload['kind']; ext: string }> = {
 
 const MIME: Record<string, string> = { '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm' }
 
-export function createApp({ store, jobs, meta, watch }: { store: Store; jobs: Jobs; meta: MetaApi; watch: PriceWatch }): Hono {
+/** Адрес клиента: за туннелем или прокси — из x-forwarded-for */
+function clientIp(c: Context): string {
+  const fwd = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
+  if (fwd) return fwd
+  try {
+    return getConnInfo(c).remote.address ?? 'local'
+  } catch {
+    return 'local'
+  }
+}
+
+export function createApp({ store, jobs, meta, watch, limits = new Limits(limitsFromEnv()) }: { store: Store; jobs: Jobs; meta: MetaApi; watch: PriceWatch; limits?: Limits }): Hono {
   const app = new Hono()
   app.use('*', cors())
+
+  const limited = (c: Context, kind: LimitKind) => {
+    const r = limits.check(clientIp(c), kind)
+    return r.ok ? null : c.json({ error: r.message, code: 'limit' }, 429, { 'retry-after': String(r.retryAfter) })
+  }
 
   app.get('/health', (c) => c.json({ ok: true, meta: meta.configured }))
 
   app.post('/uploads', async (c) => {
+    const over = limited(c, 'upload')
+    if (over) return over
     const size = Number(c.req.header('content-length') ?? 0)
     if (size > MAX_UPLOAD) return c.json({ error: 'The file is larger than 300 MB.' }, 413)
     const body = await c.req.parseBody()
@@ -41,6 +61,7 @@ export function createApp({ store, jobs, meta, watch }: { store: Store; jobs: Jo
     const id = store.id()
     const name = `${id}${type.ext}`
     writeFileSync(store.path(name), Buffer.from(await file.arrayBuffer()))
+    limits.record(clientIp(c), 'upload')
     const upload = store.addUpload({ id, kind: type.kind, name: file.name || name, mime: file.type || MIME[type.ext], size: file.size, url: `/files/${name}`, createdAt: new Date().toISOString() })
     return c.json(upload, 201)
   })
@@ -53,8 +74,13 @@ export function createApp({ store, jobs, meta, watch }: { store: Store; jobs: Jo
     else if (body.uploadId) input = { uploadId: body.uploadId }
     else if (SAMPLES.includes(body.sample as SampleName)) input = { sample: body.sample as SampleName }
     else return c.json({ error: 'Send uploadId or sample.' }, 400)
+    const over = limited(c, 'job')
+    if (over) return over
     try {
-      return c.json(jobs.start(body.kind as JobKind, input), 201)
+      const job = jobs.start(body.kind as JobKind, input)
+      // готовое видео из кэша моделям не стоит ничего — в лимит не считаем
+      if (job.status !== 'done') limits.record(clientIp(c), 'job')
+      return c.json(job, 201)
     } catch (e) {
       if (e instanceof JobError) return c.json({ error: e.message, code: e.code }, e.code === 'bad_input' ? 404 : 500)
       throw e

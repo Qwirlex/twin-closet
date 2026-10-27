@@ -10,3 +10,5 @@ server/samples/*
 !server/samples/README.md
 demo/footage/
 demo/voice.*
+dist-web/
+deploy/
