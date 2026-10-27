@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
 import { AppFrame } from '@/components/layout';
+import { ShareIntentHandler } from '@/lib/share-intent';
 import { ShoppingProvider } from '@/lib/shopping';
 import { StoreProvider } from '@/lib/store';
 import { ThemeProvider, useTheme } from '@/theme/theme';
@@ -35,6 +36,7 @@ function Root() {
   return (
     <AppFrame>
       <StatusBar style={t.scheme === 'dark' ? 'light' : 'dark'} />
+      <ShareIntentHandler />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: t.bg } }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="welcome" options={{ animation: 'fade' }} />

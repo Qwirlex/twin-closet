@@ -99,7 +99,9 @@ npm test -w @twin/server              # server tests (needs ffmpeg in PATH)
 ```
 
 On a phone (Expo Go, same Wi-Fi as the computer): put the computer's Wi-Fi address into `app/.env.local`
-(not committed), restart `npm run app`, then scan the QR code or open `exp://<address>:<port>` in Expo Go.
+(not committed), run `npm run app -- --go`, then scan the QR code or open `exp://<address>:<port>` in Expo Go.
+Sharing from Instagram or a store app ("Share → Twin Closet") needs an installed build, not Expo Go:
+`npx eas-cli build --profile preview --platform android` gives an APK (`app/eas.json`).
 
 ```bash
 EXPO_PUBLIC_API_URL=http://192.168.1.20:8787

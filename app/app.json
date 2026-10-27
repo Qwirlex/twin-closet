@@ -40,7 +40,22 @@
           "imageWidth": 96
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-share-intent",
+        {
+          "iosActivationRules": {
+            "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
+            "NSExtensionActivationSupportsWebPageWithMaxCount": 1,
+            "NSExtensionActivationSupportsImageWithMaxCount": 1
+          },
+          "iosShareExtensionName": "Twin Closet",
+          "androidIntentFilters": [
+            "text/*",
+            "image/*"
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

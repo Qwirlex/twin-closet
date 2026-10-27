@@ -37,6 +37,11 @@ const ONBOARDED = 'twin.onboarded';
 
 const WAITING_KEY = 'Cut-out and tags come once the Meta key is connected';
 
+/** Ссылка на товар: страницу прочитает Muse Spark (у него есть веб-поиск), пока ждёт ключ */
+export function linkPiece(url: string, host: string): Item {
+  return { id: `new-${Date.now()}`, name: host, meta: 'Muse Spark reads the product page once the Meta key is connected', kind: null, image: { uri: '' }, via: 'Link', pending: true, stage: 'waiting', shop: { price: null, url } };
+}
+
 export function garmentToItem(g: Garment, via?: Item['via']): Item {
   const price = g.shop?.price ? Number.parseFloat(g.shop.price.replace(/[^\d.,]/g, '').replace(',', '.')) : NaN;
   return {

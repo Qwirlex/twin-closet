@@ -9,7 +9,7 @@ import { TabScreen } from '@/components/layout';
 import { Cta, Glass, Label, T, ThemeToggle } from '@/components/ui';
 import type { Item } from '@/data/demo';
 import { useShopping } from '@/lib/shopping';
-import { useStore } from '@/lib/store';
+import { linkPiece, useStore } from '@/lib/store';
 import { useTheme } from '@/theme/theme';
 import { FONT } from '@/theme/tokens';
 
@@ -18,11 +18,6 @@ const SOURCES: { key: NonNullable<Item['via']>; label: string; sub: string; icon
   { key: 'Scanned in store', label: 'In store', sub: 'Item + price tag', icon: 'camera' },
   { key: 'Link', label: 'Link', sub: 'Paste a product URL', icon: 'link' },
 ];
-
-/** Ссылка на товар: страницу прочитает Muse Spark (у него есть веб-поиск), пока ждёт ключ */
-function linkItem(url: string, host: string): Item {
-  return { id: `new-${Date.now()}`, name: host, meta: 'Muse Spark reads the product page once the Meta key is connected', kind: null, image: { uri: '' }, via: 'Link', pending: true, stage: 'waiting', shop: { price: null, url } };
-}
 
 const STAGE: Record<NonNullable<Item['stage']>, string> = { uploading: 'uploading', working: 'reading', waiting: 'needs Meta key', failed: 'could not read' };
 
@@ -65,7 +60,7 @@ export default function TryScreen() {
       setError('That does not look like a link. Copy the product URL from the store and paste it here.');
       return;
     }
-    addToTryOn(linkItem(link.trim(), host));
+    addToTryOn(linkPiece(link.trim(), host));
     setLink('');
     setLinkOpen(false);
     setError(null);
