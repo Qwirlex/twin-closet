@@ -1,11 +1,92 @@
 # Twin Closet
 
-See new clothes on your real body, styled with what you already own, before you buy.
-Built for the Meta Global AI Developer Hackathon on Meta's models: SAM 3.1, Muse Spark and Muse Image.
+**See any piece on your real body, styled with what you already own, before you buy.**
 
-- `app/` — Expo (React Native) app: iOS, Android and web from one codebase
-- `server/` — Node + Hono API; the Meta Model API key lives only here
-- `packages/shared/` — types shared by app and server
+Scan yourself once and film your closet. Then screenshot a piece from any store, or snap it in the shop:
+Twin Closet tells you whether you already own something like it, builds outfits with your own clothes and shows
+them on you from four angles. Your face, hair and hands are never generated: they stay your real pixels.
+
+Built for the Meta Global AI Developer Hackathon (Indie track) on SAM 3.1, Muse Spark, Muse Image and
+Muse Voice Transcribe.
+
+## Try it as a judge (no camera needed)
+
+1. Open the web version and tap **Explore the demo account**: a closet, a body scan and two pieces to try are ready.
+2. **Try on → Screenshot**: add any product screenshot from a store. It is cut out, read and compared with the closet.
+3. **Scan → Use sample video**: watch the closet scan run step by step, each step labelled with the Meta model doing it.
+4. **Try on → See it on me**: compare your clothes and the try-on with the slider, turn the angle dial.
+
+Demo limits keep the hackathon credits safe: a few uploads per hour and model jobs per day per visitor;
+sample results are cached and free.
+
+## What each Meta model does
+
+| Step | Model | Job |
+|---|---|---|
+| Closet scan | **Muse Spark** | finds every piece on key frames of the video, with boxes |
+| | **SAM 3.1** (video) | tracks each piece through the video, cuts out its best frame |
+| | **Muse Spark** | tags each piece (kind, colour, fabric, fit) and merges duplicates |
+| Body scan | **Muse Spark** | picks front, 3/4, side and back frames from a 6-second spin |
+| | **SAM 3.1** | masks the person, face, hair, hands and current clothes |
+| New piece | **SAM 3.1** | cuts the piece out of a screenshot or an in-store photo |
+| | **Muse Spark** | reads brand, REF, price, sale price, size and fabric from the tag |
+| | **Muse Spark** + web search | finds the same piece online in the person's country |
+| "You already own this" | **Muse Spark** | compares the new piece with the closet |
+| Outfits | **Muse Spark** | builds 3 looks from the new piece and the closet |
+| Try-on | **Muse Image** | dresses the person's photo, image search turned off |
+| | **SAM 3.1** | masks the result so face, hair and hands are pasted back from the original |
+| | **Muse Spark** | checks the result: same person, same pose, garment matches, no seams |
+| Price drops | **Muse Spark** + web search | daily "is the store on sale?" and wishlist prices |
+| Twin, the stylist | **Muse Spark** (tools) | outfits from the closet, wishlist and favourite stores |
+| | **Muse Voice Transcribe** | voice input in the chat |
+
+```mermaid
+flowchart LR
+  phone["App: iOS, Android, web<br/>Expo / React Native"] -->|photos, videos| server["Server<br/>Node + Hono + ffmpeg"]
+  server -->|key frames, tags, outfits, checks| spark["Muse Spark"]
+  server -->|masks and tracks| sam["SAM 3.1"]
+  server -->|try-on images| image["Muse Image"]
+  server -->|voice| voice["Muse Voice Transcribe"]
+  spark -->|web search| stores["Store pages<br/>Zara, Bershka, Pull & Bear"]
+  server -->|"result: original pixels except clothes"| phone
+```
+
+## How the face and hands stay real
+
+Muse Image redraws the whole picture, so protection is built around it, not asked of it
+(`server/src/tryon/compose.ts`):
+
+1. SAM 3.1 masks the person, face, hair and hands on the original photo and the person and new clothes on the result.
+2. The result is aligned to the photo by silhouette and the uncovered body; a result whose pose changed is rejected.
+3. Clothing zone = old clothes ∪ new clothes − face, hair and hands.
+4. Colour is matched on a band around the zone (the face is left out: the model may have changed it), and the
+   result is pasted into the original with a soft edge. Everything outside the zone is the original photo.
+
+Tested on synthetic scenes (alignment, untouched protected pixels, colour cast, a jacket over bare arms, a changed pose)
+and on real photos: `npm run demo:compose -w @twin/server`.
+
+## Privacy and data
+
+- The Meta key lives only on the server.
+- Uploaded photos, videos and key frames are deleted after 48 hours; sample results stay as a cache.
+- Each device keeps its own wishlist on the server; accounts with owner-only access (Supabase RLS) are prepared
+  in `supabase/migrations/`.
+- Product data comes only from the user's own photos and from Muse Spark search results. The app does not scrape store
+  websites or call their private APIs. Zara, Bershka and Pull & Bear are live; other shops are coming soon.
+
+## Status
+
+Built and tested now: all screens on the demo account, uploads and jobs with steps, video to H.264 and key frames,
+try-on compositing, store search and sale checks on Muse Spark, wishlist price watch, demo limits, 48-hour cleanup.
+Waiting for the hackathon API key: the SAM 3.1, Muse Spark and Muse Image calls inside scans and try-ons
+(prompts and schemas are ready in `server/src/models/`). Until then the app says so at the step that needs the key.
+
+## Code
+
+- `app/` — Expo (React Native) app: iOS, Android and web from one codebase. Design system "Noir" (`docs/design.md`).
+- `server/` — Node + Hono API: uploads, jobs with steps, ffmpeg, try-on compositing, price watch, demo limits.
+  Model prompts and strict JSON schemas: `server/src/models/`.
+- `packages/shared/` — types shared by app and server.
 
 ## Run
 
@@ -14,6 +95,7 @@ npm install
 cp server/.env.example server/.env   # add MODEL_API_KEY
 npm run server                        # http://localhost:8787
 npm run app                           # Expo dev server; open in Expo Go or press w for web
+npm test -w @twin/server              # server tests (needs ffmpeg in PATH)
 ```
 
 On a phone (Expo Go, same Wi-Fi as the computer): put the computer's Wi-Fi address into `app/.env.local`
@@ -24,14 +106,11 @@ EXPO_PUBLIC_API_URL=http://192.168.1.20:8787
 REACT_NATIVE_PACKAGER_HOSTNAME=192.168.1.20
 ```
 
-Plan (in Russian): [PLAN.md](PLAN.md).
+Web build for judges: `TWIN_API_URL=https://<server> npm run build:web -w @twin/app` (local `.env` files are ignored).
 
-## Stores and price drops
+Plan and decisions (in Russian): [PLAN.md](PLAN.md).
 
-Favourite stores and a wishlist. Zara, Bershka and Pull & Bear are live: Muse Spark web search finds a piece
-online by the REF on its tag, and the server checks wishlist prices once a day. Other shops are coming soon.
-Product data comes only from the user's own photos and from Muse Spark search results; the app does not
-scrape store websites or call their private APIs.
+## Credits
 
-Brand list: [Name Suggestion Index](https://github.com/osmlab/name-suggestion-index) by OpenStreetMap
-contributors, BSD 3-Clause.
+Brand list: [Name Suggestion Index](https://github.com/osmlab/name-suggestion-index) by OpenStreetMap contributors,
+BSD 3-Clause. Demo photos in `app/assets/demo` are generated for the mockups.
