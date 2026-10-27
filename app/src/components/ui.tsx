@@ -55,10 +55,11 @@ export function Glass({ children, style, radius = 999, variant = 'ui', tokens }:
   const { t } = useTheme();
   const g = tokens ?? (variant === 'photo' ? PHOTO_GLASS : t.glass);
   return (
-    <View style={[{ borderRadius: radius, borderWidth: 1, borderColor: g.border, boxShadow: g.shadow, overflow: 'hidden' }, style]}>
+    // zIndex 0 + слои на -1: на вебе стекло лежит под содержимым и не перехватывает нажатия (поля ввода, иконки)
+    <View style={[{ borderRadius: radius, borderWidth: 1, borderColor: g.border, boxShadow: g.shadow, overflow: 'hidden', zIndex: 0 }, style]}>
       {/* скругление у слоёв — на случай overflow: visible (меню с приподнятой кнопкой) */}
-      {g.blur > 0 ? <BlurView intensity={g.blur} tint={t.scheme === 'dark' || variant === 'photo' ? 'dark' : 'light'} style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden' }]} /> : null}
-      <LinearGradient colors={g.colors} style={[StyleSheet.absoluteFill, { borderRadius: radius }]} />
+      {g.blur > 0 ? <BlurView pointerEvents="none" intensity={g.blur} tint={t.scheme === 'dark' || variant === 'photo' ? 'dark' : 'light'} style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden', zIndex: -1 }]} /> : null}
+      <LinearGradient pointerEvents="none" colors={g.colors} style={[StyleSheet.absoluteFill, { borderRadius: radius, zIndex: -1 }]} />
       {children}
     </View>
   );

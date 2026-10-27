@@ -8,6 +8,7 @@ import { createApp } from '../src/app'
 import { Jobs } from '../src/jobs'
 import { MetaApi } from '../src/meta'
 import { Store } from '../src/store'
+import { PriceWatch } from '../src/watch'
 
 // Настоящий ffmpeg: короткое тестовое видео с телефона «боком» (портрет) и картинка
 const dir = mkdtempSync(join(tmpdir(), 'twin-test-'))
@@ -23,7 +24,8 @@ beforeAll(() => {
 function setup() {
   const store = new Store(mkdtempSync(join(dir, 'data-')))
   const meta = new MetaApi('')
-  const app = createApp({ store, jobs: new Jobs(store, meta, samples), meta })
+  const jobs = new Jobs(store, meta, samples)
+  const app = createApp({ store, jobs, meta, watch: new PriceWatch(store, jobs, meta) })
   return { store, app }
 }
 

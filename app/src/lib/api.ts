@@ -1,4 +1,4 @@
-import type { Job, JobKind, SampleName, Upload } from '@twin/shared';
+import type { Job, JobKind, LookupQuery, SampleName, Upload, WatchItem } from '@twin/shared';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
@@ -46,7 +46,7 @@ export async function uploadAsset(asset: ImagePickerAsset): Promise<Upload> {
   return call('/uploads', { method: 'POST', body: form });
 }
 
-export function startJob(kind: JobKind, input: { uploadId: string } | { sample: SampleName }): Promise<Job> {
+export function startJob(kind: JobKind, input: { uploadId: string } | { sample: SampleName } | { lookup: LookupQuery }): Promise<Job> {
   return call('/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind, ...input }) });
 }
 
@@ -84,4 +84,13 @@ export function useJob(id: string | null): { job: Job | null; error: string | nu
   }, [id]);
 
   return { job, error };
+}
+
+/** Вишлист для слежки за ценой: сервер хранит только вещи живых магазинов */
+export async function putWatch(items: Omit<WatchItem, 'lastPrice' | 'onSale' | 'checkedAt'>[]): Promise<WatchItem[]> {
+  return (await call<{ items: WatchItem[] }>('/watch', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ items }) })).items;
+}
+
+export async function getWatch(): Promise<WatchItem[]> {
+  return (await call<{ items: WatchItem[] }>('/watch')).items;
 }

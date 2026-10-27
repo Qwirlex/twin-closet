@@ -20,7 +20,7 @@ export interface Garment {
   /** кадр, из которого вырезана вещь */
   sourceFrameUrl: string | null
   /** для вещей из магазина */
-  shop: { brand: string | null; price: string | null; url: string | null; sizes: string | null } | null
+  shop: { brand: string | null; price: string | null; url: string | null; sizes: string | null; ref?: string | null } | null
   createdAt: string
 }
 
@@ -49,7 +49,7 @@ export interface SimilarOwned {
 }
 
 /** Долгие задачи: скан шкафа, скан себя, примерка */
-export const JOB_KINDS = ['closet_scan', 'body_scan', 'import_item', 'try_on'] as const
+export const JOB_KINDS = ['closet_scan', 'body_scan', 'import_item', 'try_on', 'product_lookup'] as const
 export type JobKind = (typeof JOB_KINDS)[number]
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed'
 
@@ -84,8 +84,17 @@ export interface Job {
   updatedAt: string
 }
 
-/** Откуда взять видео или фото для задачи */
-export type JobInput = { uploadId: string } | { sample: SampleName }
+/** Откуда взять видео или фото для задачи; поиск вещи в магазине — без файла */
+export type JobInput = { uploadId: string } | { sample: SampleName } | { lookup: LookupQuery }
+
+/** Найти вещь онлайн в магазине: по артикулу с бирки или по описанию */
+export interface LookupQuery {
+  storeId: string
+  ref?: string
+  query?: string
+  /** ISO-код страны: цены и наличие — для этой страны */
+  country: string
+}
 
 export const SAMPLES = ['closet', 'body', 'item'] as const
 export type SampleName = (typeof SAMPLES)[number]
@@ -107,6 +116,8 @@ export interface JobResult {
   body?: BodyPhoto[]
   item?: Garment
   similar?: SimilarOwned[]
+  /** что нашёл веб-поиск Muse Spark */
+  products?: ProductHit[]
 }
 
 export interface Upload {
@@ -118,3 +129,43 @@ export interface Upload {
   url: string
   createdAt: string
 }
+
+/** Бренд одежды. Список — Name Suggestion Index (OpenStreetMap, BSD-3), сайты вписаны вручную */
+export interface StoreBrand {
+  id: string
+  name: string
+  domain: string
+  wikidata: string | null
+  /** ISO-коды стран; '001' — весь мир */
+  countries: string[]
+  /** поиск вещей и слежка за ценой уже работают */
+  live: boolean
+}
+
+/** Вещь, найденная веб-поиском Muse Spark */
+export interface ProductHit {
+  title: string
+  url: string
+  price: number | null
+  currency: string | null
+  snippet: string
+}
+
+/** Вещь в вишлисте, которую сервер проверяет на скидку */
+export interface WatchItem {
+  id: string
+  name: string
+  storeId: string
+  ref: string | null
+  url: string | null
+  /** цена, когда вещь добавили */
+  price: number | null
+  currency: string | null
+  country: string
+  lastPrice: number | null
+  onSale: boolean
+  checkedAt: string | null
+}
+
+/** Магазины, где поиск вещей и слежка за ценой уже работают; остальные — «Coming soon» */
+export const LIVE_STORE_IDS = ['zara', 'bershka', 'pull-and-bear'] as const

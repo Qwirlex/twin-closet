@@ -8,6 +8,7 @@ import { Icon, type IconName } from '@/components/icons';
 import { TabScreen } from '@/components/layout';
 import { Cta, Glass, Label, T, ThemeToggle } from '@/components/ui';
 import type { Item } from '@/data/demo';
+import { useShopping } from '@/lib/shopping';
 import { useStore } from '@/lib/store';
 import { useTheme } from '@/theme/theme';
 import { FONT } from '@/theme/tokens';
@@ -32,6 +33,7 @@ export default function TryScreen() {
   const [link, setLink] = useState('');
   const [error, setError] = useState<string | null>(null);
   const looks = looksForTryOn();
+  const { isWished, toggleWish } = useShopping();
 
   async function pick(via: NonNullable<Item['via']>) {
     setError(null);
@@ -157,7 +159,10 @@ export default function TryScreen() {
                 </T>
               </View>
             </View>
-            <Pressable onPress={() => removeFromTryOn(it.id)} accessibilityRole="button" accessibilityLabel={`Remove ${it.name}`} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+            <Pressable onPress={() => toggleWish(it)} accessibilityRole="button" accessibilityLabel={isWished(it.id) ? `Remove ${it.name} from wishlist` : `Save ${it.name} to wishlist`} accessibilityState={{ selected: isWished(it.id) }} style={{ width: 40, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="heart" size={19} color={isWished(it.id) ? t.accent : t.muted} filled={isWished(it.id)} />
+            </Pressable>
+            <Pressable onPress={() => removeFromTryOn(it.id)} accessibilityRole="button" accessibilityLabel={`Remove ${it.name}`} style={{ width: 40, height: 44, alignItems: 'center', justifyContent: 'center' }}>
               <Icon name="close" size={18} color={t.muted} />
             </Pressable>
           </View>

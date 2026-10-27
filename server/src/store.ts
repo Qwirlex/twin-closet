@@ -2,11 +2,13 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { Job, Upload } from '@twin/shared'
+import type { Job, Upload, WatchItem } from '@twin/shared'
 
 interface Db {
   uploads: Upload[]
   jobs: Job[]
+  /** вишлист для слежки за ценой */
+  watch: WatchItem[]
 }
 
 export class Store {
@@ -18,7 +20,7 @@ export class Store {
     this.files = join(dir, 'files')
     mkdirSync(this.files, { recursive: true })
     this.dbPath = join(dir, 'db.json')
-    this.db = existsSync(this.dbPath) ? (JSON.parse(readFileSync(this.dbPath, 'utf8')) as Db) : { uploads: [], jobs: [] }
+    this.db = { uploads: [], jobs: [], watch: [], ...(existsSync(this.dbPath) ? (JSON.parse(readFileSync(this.dbPath, 'utf8')) as Partial<Db>) : {}) }
     // задачи, которые шли во время перезапуска, уже не доедут
     for (const j of this.db.jobs) if (j.status === 'queued' || j.status === 'running') Object.assign(j, { status: 'failed', error: 'Сервер перезапустился во время задачи', errorCode: 'internal' })
   }
@@ -63,6 +65,15 @@ export class Store {
     Object.assign(j, patch, { updatedAt: new Date().toISOString() })
     this.save()
     return j
+  }
+
+  watch(): WatchItem[] {
+    return this.db.watch
+  }
+
+  setWatch(items: WatchItem[]): void {
+    this.db.watch = items
+    this.save()
   }
 
   private save(): void {

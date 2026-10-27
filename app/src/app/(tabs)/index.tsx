@@ -5,9 +5,11 @@ import { useState } from 'react';
 import { Pressable, ScrollView, TextInput, View } from 'react-native';
 
 import { GarmentTile } from '@/components/garments';
+import { WishlistView } from '@/components/wishlist';
 import { TabScreen, useFrameWidth } from '@/components/layout';
 import { ArrowDot, Glass, GlassButton, GoldRim, Label, Orb, T, ThemeToggle } from '@/components/ui';
 import { KIND_LABEL } from '@/data/demo';
+import { useShopping } from '@/lib/shopping';
 import { useStore } from '@/lib/store';
 import { useTheme } from '@/theme/theme';
 import { FONT } from '@/theme/tokens';
@@ -17,6 +19,8 @@ export default function ClosetScreen() {
   const { closet } = useStore();
   const [kind, setKind] = useState<GarmentKind | 'all'>('all');
   const [query, setQuery] = useState<string | null>(null);
+  const [view, setView] = useState<'closet' | 'wishlist'>('closet');
+  const { wishlist } = useShopping();
   const tileW = (useFrameWidth() - 40 - 12) / 2;
 
   const kinds = [...new Set(closet.map((i) => i.kind).filter((k): k is GarmentKind => !!k))];
@@ -47,7 +51,27 @@ export default function ClosetScreen() {
         </View>
       </View>
 
-      {query !== null ? (
+      <View style={{ flexDirection: 'row', gap: 22, borderBottomWidth: 1, borderBottomColor: t.line }} accessibilityRole="tablist">
+        {(
+          [
+            ['closet', 'My closet'],
+            ['wishlist', `Wishlist · ${wishlist.length}`],
+          ] as const
+        ).map(([key, label]) => {
+          const on = view === key;
+          return (
+            <Pressable key={key} onPress={() => setView(key)} accessibilityRole="tab" accessibilityState={{ selected: on }} style={{ minHeight: 44, justifyContent: 'center', marginBottom: -1, borderBottomWidth: 1.5, borderBottomColor: on ? t.accent : 'transparent' }}>
+              <T size={14} w={on ? 500 : 400} color={on ? t.text : t.muted}>
+                {label}
+              </T>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {view === 'wishlist' ? <WishlistView tileW={tileW} /> : null}
+
+      {view === 'closet' && query !== null ? (
         <Glass style={{ height: 48, paddingHorizontal: 18, justifyContent: 'center' }}>
           <TextInput
             autoFocus
@@ -61,57 +85,61 @@ export default function ClosetScreen() {
         </Glass>
       ) : null}
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 14 }} style={{ marginHorizontal: -20 }}>
-        <View style={{ width: 6 }} />
-        {cats.map((c) => {
-          const on = c.key === kind;
-          return (
-            <Pressable key={c.key} onPress={() => setKind(c.key)} accessibilityRole="button" accessibilityState={{ selected: on }} accessibilityLabel={c.name} style={{ alignItems: 'center', gap: 6 }}>
-              <View style={{ width: 58, height: 58, borderRadius: 29, backgroundColor: t.surface2, borderWidth: 1.5, borderColor: on ? t.accent : t.line, alignItems: 'center', justifyContent: 'center' }}>
-                {c.image ? <Image source={c.image} contentFit="contain" style={{ width: 40, height: 40 }} accessible={false} /> : null}
-              </View>
-              <T size={12} w={on ? 600 : 400} color={on ? t.text : t.muted}>
-                {c.name}
-              </T>
-            </Pressable>
-          );
-        })}
-        <View style={{ width: 6 }} />
-      </ScrollView>
+      {view === 'closet' ? (
+        <>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 14 }} style={{ marginHorizontal: -20 }}>
+            <View style={{ width: 6 }} />
+            {cats.map((c) => {
+              const on = c.key === kind;
+              return (
+                <Pressable key={c.key} onPress={() => setKind(c.key)} accessibilityRole="button" accessibilityState={{ selected: on }} accessibilityLabel={c.name} style={{ alignItems: 'center', gap: 6 }}>
+                  <View style={{ width: 58, height: 58, borderRadius: 29, backgroundColor: t.surface2, borderWidth: 1.5, borderColor: on ? t.accent : t.line, alignItems: 'center', justifyContent: 'center' }}>
+                    {c.image ? <Image source={c.image} contentFit="contain" style={{ width: 40, height: 40 }} accessible={false} /> : null}
+                  </View>
+                  <T size={12} w={on ? 600 : 400} color={on ? t.text : t.muted}>
+                    {c.name}
+                  </T>
+                </Pressable>
+              );
+            })}
+            <View style={{ width: 6 }} />
+          </ScrollView>
 
-      <Pressable onPress={() => router.push('/scan')} accessibilityRole="button" accessibilityLabel="Video scan. Add your whole rail in 30 seconds">
-        <GoldRim style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 11, paddingLeft: 17, paddingRight: 9 }}>
-          <View style={{ flex: 1, gap: 3 }}>
-            <Label accent>Video scan</Label>
-            <T size={15} w={500}>
-              Add your whole rail in 30 seconds
+          <Pressable onPress={() => router.push('/scan')} accessibilityRole="button" accessibilityLabel="Video scan. Add your whole rail in 30 seconds">
+            <GoldRim style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 11, paddingLeft: 17, paddingRight: 9 }}>
+              <View style={{ flex: 1, gap: 3 }}>
+                <Label accent>Video scan</Label>
+                <T size={15} w={500}>
+                  Add your whole rail in 30 seconds
+                </T>
+              </View>
+              <ArrowDot />
+            </GoldRim>
+          </Pressable>
+
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+            <T size={12} w={500} upper>
+              {items.length} {items.length === 1 ? 'item' : 'items'}
+            </T>
+            <T size={13} color={t.muted}>
+              Recently added
             </T>
           </View>
-          <ArrowDot />
-        </GoldRim>
-      </Pressable>
 
-      <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
-        <T size={12} w={500} upper>
-          {items.length} {items.length === 1 ? 'item' : 'items'}
-        </T>
-        <T size={13} color={t.muted}>
-          Recently added
-        </T>
-      </View>
-
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-        {items.map((it) => (
-          <View key={it.id} style={{ width: tileW }}>
-            <GarmentTile item={it} />
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+            {items.map((it) => (
+              <View key={it.id} style={{ width: tileW }}>
+                <GarmentTile item={it} />
+              </View>
+            ))}
+            {items.length === 0 ? (
+              <T size={14} color={t.muted}>
+                Nothing matches. Try another word or category.
+              </T>
+            ) : null}
           </View>
-        ))}
-        {items.length === 0 ? (
-          <T size={14} color={t.muted}>
-            Nothing matches. Try another word or category.
-          </T>
-        ) : null}
-      </View>
+        </>
+      ) : null}
     </TabScreen>
   );
 }

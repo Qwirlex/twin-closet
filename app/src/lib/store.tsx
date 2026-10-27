@@ -3,6 +3,7 @@ import type { ImagePickerAsset } from 'expo-image-picker';
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 
 import { CLOSET, LOOKS, OWN_LOOKS, SHOP, type DemoLook, type Item } from '@/data/demo';
+import { STORES } from '@/data/stores';
 import { fileUrl, getJob, startJob, uploadAsset } from '@/lib/api';
 import { readSetting, writeSetting } from '@/lib/storage';
 
@@ -45,7 +46,13 @@ export function garmentToItem(g: Garment, via?: Item['via']): Item {
     kind: g.kind,
     image: { uri: fileUrl(g.cutoutUrl) },
     via,
-    shop: { price: Number.isFinite(price) ? price : null, url: g.shop?.url ?? null },
+    shop: {
+      price: Number.isFinite(price) ? price : null,
+      currency: g.shop?.price?.match(/€|EUR/i) ? 'EUR' : g.shop?.price?.match(/£|GBP/i) ? 'GBP' : g.shop?.price?.match(/\$|USD/i) ? 'USD' : null,
+      url: g.shop?.url ?? null,
+      storeId: STORES.find((s) => g.shop?.brand && s.name.toLowerCase() === g.shop.brand.toLowerCase())?.id ?? null,
+      ref: g.shop?.ref ?? null,
+    },
   };
 }
 

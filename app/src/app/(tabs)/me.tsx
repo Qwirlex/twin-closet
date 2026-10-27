@@ -9,6 +9,8 @@ import { Icon } from '@/components/icons';
 import { TabScreen, useFrameWidth } from '@/components/layout';
 import { Glass, GoldRim, Label, PhotoChip, T } from '@/components/ui';
 import { ANGLES, ME } from '@/data/demo';
+import { countryName } from '@/data/stores';
+import { useShopping } from '@/lib/shopping';
 import { useStore } from '@/lib/store';
 import { useTheme, type ThemeMode } from '@/theme/theme';
 import { PHOTO_BG } from '@/theme/tokens';
@@ -18,6 +20,7 @@ const CLEAR = 'rgba(39,39,39,0)';
 export default function MeScreen() {
   const { t, mode, setMode } = useTheme();
   const { setOnboarded } = useStore();
+  const { favoriteIds, country } = useShopping();
   const [angle, setAngle] = useState(0);
   const heroW = useFrameWidth() - 40;
   const heroH = 372;
@@ -93,6 +96,21 @@ export default function MeScreen() {
           })}
         </View>
       </GoldRim>
+
+      <Pressable onPress={() => router.push('/stores')} accessibilityRole="button" accessibilityLabel={`My stores: ${favoriteIds.length}, region ${countryName(country)}`}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 22, backgroundColor: t.surface, borderWidth: 1, borderColor: t.line }}>
+          <Icon name="tag" size={20} color={t.accent} />
+          <View style={{ flex: 1 }}>
+            <T size={15} w={500}>
+              My stores · {favoriteIds.length}
+            </T>
+            <T size={12} color={t.muted}>
+              {countryName(country)} · price drops on your wishlist
+            </T>
+          </View>
+          <Icon name="next" size={18} color={t.muted} />
+        </View>
+      </Pressable>
 
       <View style={{ gap: 4 }}>
         <View style={{ flexDirection: 'row', gap: 8 }}>

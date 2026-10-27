@@ -6,12 +6,15 @@ import { createApp } from './app'
 import { Jobs } from './jobs'
 import { MetaApi } from './meta'
 import { Store } from './store'
+import { PriceWatch } from './watch'
 
 const root = join(import.meta.dirname, '..')
 const meta = new MetaApi(process.env.MODEL_API_KEY ?? '')
 const store = new Store(process.env.DATA_DIR ?? join(root, 'data'))
 const jobs = new Jobs(store, meta, join(root, 'samples'))
-const app = createApp({ store, jobs, meta })
+const watch = new PriceWatch(store, jobs, meta)
+const app = createApp({ store, jobs, meta, watch })
+watch.schedule()
 
 const port = Number(process.env.PORT ?? 8787)
 serve({ fetch: app.fetch, port, hostname: '0.0.0.0' }, () => {

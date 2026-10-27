@@ -2,7 +2,7 @@
 // Всё, что не требует моделей (видео → MP4, ключевые кадры), работает уже сейчас; шаги моделей ждут ключ Meta.
 import { copyFileSync, existsSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
-import type { Job, JobErrorCode, JobInput, JobKind, JobResult, JobStep, MediaInfo, SampleName } from '@twin/shared'
+import { LIVE_STORE_IDS, type Job, type JobErrorCode, type JobInput, type JobKind, type JobResult, type JobStep, type MediaInfo, type SampleName } from '@twin/shared'
 import { keyframes, normalizeImage, normalizeVideo, probe } from './media'
 import type { MetaApi } from './meta'
 import type { Store } from './store'
@@ -37,12 +37,17 @@ const STEPS: Record<JobKind, StepDef[]> = {
     { key: 'prepare', label: 'Preparing the photo', model: null },
     { key: 'cutout', label: 'Cutting out the piece', model: 'SAM 3.1' },
     { key: 'read', label: 'Reading brand, price and size', model: 'Muse Spark' },
+    { key: 'online', label: 'Finding it online', model: 'Muse Spark' },
     { key: 'similar', label: 'Checking what you already own', model: 'Muse Spark' }
   ],
   try_on: [
     { key: 'dress', label: 'Dressing you in the look', model: 'Muse Image' },
     { key: 'protect', label: 'Keeping your face and hands real', model: 'SAM 3.1' },
     { key: 'check', label: 'Checking the result', model: 'Muse Spark' }
+  ],
+  product_lookup: [
+    { key: 'search', label: 'Searching the store', model: 'Muse Spark' },
+    { key: 'read', label: 'Reading price and sizes', model: 'Muse Spark' }
   ]
 }
 
@@ -52,7 +57,8 @@ const KEYFRAMES: Partial<Record<JobKind, number>> = { closet_scan: 8, body_scan:
 const SAMPLE_EXT = ['.mp4', '.mov', '.jpg', '.jpeg', '.png', '.webp']
 
 interface Source {
-  path: string
+  /** null — задача без файла (поиск вещи в магазине) */
+  path: string | null
   /** готовые видео и фото кэшируются — судьи не тратят кредиты на одно и то же */
   sample: SampleName | null
 }
@@ -90,7 +96,22 @@ export class Jobs {
     return job
   }
 
+  /** Ждёт, пока задача закончится (для проверки цен на сервере; телефон опрашивает сам) */
+  async wait(id: string, timeoutMs = 120_000): Promise<Job> {
+    const until = Date.now() + timeoutMs
+    for (;;) {
+      const job = this.store.job(id)!
+      if (job.status === 'done' || job.status === 'failed' || Date.now() > until) return job
+      await new Promise((r) => setTimeout(r, 300))
+    }
+  }
+
   private source(input: JobInput): Source {
+    if ('lookup' in input) {
+      if (!(LIVE_STORE_IDS as readonly string[]).includes(input.lookup.storeId)) throw new JobError('bad_input', 'Searching this store is coming soon.')
+      if (!input.lookup.ref?.trim() && !input.lookup.query?.trim()) throw new JobError('bad_input', 'Send the REF from the tag or a short description.')
+      return { path: null, sample: null }
+    }
     if ('uploadId' in input) {
       const u = this.store.upload(input.uploadId)
       if (!u) throw new JobError('bad_input', 'Upload not found. Try adding the file again.')
@@ -133,9 +154,11 @@ export class Jobs {
     }
 
     try {
-      const media = await step('prepare', () => this.prepare(id, kind, source.path))
-      result.media = media
-      if (KEYFRAMES[kind] && media.kind === 'video' && media.duration) {
+      const media = source.path ? await step('prepare', () => this.prepare(id, kind, source.path!)) : null
+      if (media) result.media = media
+      if (!media) {
+        // поиск вещи в магазине: файла нет, сразу шаги моделей
+      } else if (KEYFRAMES[kind] && media.kind === 'video' && media.duration) {
         const frames = await step('keyframes', () => keyframes(this.store.path(`${id}.mp4`), media.duration!, KEYFRAMES[kind]!, (i) => this.store.path(`${id}-k${i}.jpg`)))
         result.keyframes = frames.map((_, i) => `/files/${id}-k${i}.jpg`)
       } else if (KEYFRAMES[kind]) {

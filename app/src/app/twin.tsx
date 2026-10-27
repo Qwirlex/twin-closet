@@ -23,7 +23,7 @@ interface Message {
   look?: string;
 }
 
-const CHIPS = ['Dinner on Friday', 'Weekend plans', 'Evening out', 'How do I scan?'];
+const CHIPS = ['Dinner on Friday', 'Find it in Zara', 'Weekend plans', 'Evening out', 'How do I scan?'];
 
 const LOOK_REPLIES: { match: RegExp; look: string; text: string }[] = [
   { match: /dinner|date|friday|work|office/i, look: 'office', text: 'Smart but relaxed: the wide-leg jeans you are eyeing with your grey tee and Chelsea boots.' },
@@ -36,8 +36,12 @@ const SCAN_HELP =
 const OFFLINE = 'I answer free questions once the Meta key is connected. For now, pick one of the ideas below.';
 const BARS = [8, 14, 20, 12, 24, 18, 10, 22, 28, 16, 12, 20, 26, 14, 8, 18, 24, 12, 20, 10, 16, 22, 12, 8];
 
+const STORE_SEARCH =
+  'Once the Meta key is connected I search Zara, Bershka and Pull & Bear for you with Muse Spark web search: a piece that completes your look, at the price in your country. Anything you like goes to your wishlist, and I tell you when it gets cheaper. Other shops are coming soon.';
+
 function replyTo(text: string): Message[] {
   if (/scan|camera|film/i.test(text)) return [{ id: 0, from: 'twin', text: SCAN_HELP }];
+  if (/zara|bershka|pull|store|shop|buy|find/i.test(text)) return [{ id: 0, from: 'twin', text: STORE_SEARCH }];
   const hit = LOOK_REPLIES.find((r) => r.match.test(text));
   if (!hit) return [{ id: 0, from: 'twin', text: OFFLINE }];
   return [

@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
 import { AppFrame } from '@/components/layout';
+import { ShoppingProvider } from '@/lib/shopping';
 import { StoreProvider } from '@/lib/store';
 import { ThemeProvider, useTheme } from '@/theme/theme';
 
@@ -21,7 +22,9 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <StoreProvider>
-        <Root />
+        <ShoppingProvider>
+          <Root />
+        </ShoppingProvider>
       </StoreProvider>
     </ThemeProvider>
   );
@@ -39,6 +42,7 @@ function Root() {
         <Stack.Screen name="scan" options={{ presentation: 'fullScreenModal', contentStyle: { backgroundColor: '#1A1A1C' } }} />
         <Stack.Screen name="result" />
         <Stack.Screen name="twin" />
+        <Stack.Screen name="stores" />
       </Stack>
     </AppFrame>
   );

@@ -19,3 +19,13 @@ npm run app                           # Expo dev server; open in Expo Go or pres
 On a phone, set `EXPO_PUBLIC_API_URL` in `app/.env` to the computer's address on the home network.
 
 Plan (in Russian): [PLAN.md](PLAN.md).
+
+## Stores and price drops
+
+Favourite stores and a wishlist. Zara, Bershka and Pull & Bear are live: Muse Spark web search finds a piece
+online by the REF on its tag, and the server checks wishlist prices once a day. Other shops are coming soon.
+Product data comes only from the user's own photos and from Muse Spark search results; the app does not
+scrape store websites or call their private APIs.
+
+Brand list: [Name Suggestion Index](https://github.com/osmlab/name-suggestion-index) by OpenStreetMap
+contributors, BSD 3-Clause.
