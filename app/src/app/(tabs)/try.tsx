@@ -54,10 +54,14 @@ export default function TryScreen() {
   }
 
   function addLink() {
-    let host: string;
+    // на телефоне URL не бросает ошибку на плохой ссылке, а отдаёт пустой адрес — проверяем оба случая
+    let host = '';
     try {
       host = new URL(link.trim()).hostname.replace(/^www\./, '');
     } catch {
+      host = '';
+    }
+    if (!/^https?:\/\//i.test(link.trim()) || !host.includes('.')) {
       setError('That does not look like a link. Copy the product URL from the store and paste it here.');
       return;
     }

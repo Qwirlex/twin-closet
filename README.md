@@ -16,7 +16,13 @@ npm run server                        # http://localhost:8787
 npm run app                           # Expo dev server; open in Expo Go or press w for web
 ```
 
-On a phone, set `EXPO_PUBLIC_API_URL` in `app/.env` to the computer's address on the home network.
+On a phone (Expo Go, same Wi-Fi as the computer): put the computer's Wi-Fi address into `app/.env.local`
+(not committed), restart `npm run app`, then scan the QR code or open `exp://<address>:<port>` in Expo Go.
+
+```bash
+EXPO_PUBLIC_API_URL=http://192.168.1.20:8787
+REACT_NATIVE_PACKAGER_HOSTNAME=192.168.1.20
+```
 
 Plan (in Russian): [PLAN.md](PLAN.md).
 
