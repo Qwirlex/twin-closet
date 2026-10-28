@@ -66,6 +66,10 @@ export const STORES: StoreBrand[] = [
   { id: 'asos', name: 'ASOS', domain: 'asos.com', wikidata: null, countries: ['001'], live: false },
   { id: 'zalando', name: 'Zalando', domain: 'zalando.com', wikidata: null, countries: ['001'], live: false },
   { id: 'about-you', name: 'About You', domain: 'aboutyou.com', wikidata: null, countries: ['001'], live: false },
+  // дешёвый сегмент (PLAN.md 1.2 Г): размеры там часто маломерят — карта посадки нужнее всего
+  { id: 'shein', name: 'Shein', domain: 'shein.com', wikidata: null, countries: ['001'], live: false },
+  { id: 'aliexpress', name: 'AliExpress', domain: 'aliexpress.com', wikidata: null, countries: ['001'], live: false },
+  { id: 'temu', name: 'Temu', domain: 'temu.com', wikidata: null, countries: ['001'], live: false },
 ];
 
 /** Страны для выбора региона: названия по-английски, как во всём приложении */
