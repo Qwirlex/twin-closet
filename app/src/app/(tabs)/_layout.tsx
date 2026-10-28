@@ -9,7 +9,8 @@ export default function TabsLayout() {
   if (!onboarded) return <Redirect href="/welcome" />;
   return (
     <Tabs>
-      <TabSlot />
+      {/* TabSlot по умолчанию не сжимается (flexShrink 0): на вебе вкладка вырастает до высоты контента и не листается */}
+      <TabSlot style={{ flexShrink: 1, flexBasis: 0 }} />
       <TabList asChild>
         <TabBar>{tabItems()}</TabBar>
       </TabList>

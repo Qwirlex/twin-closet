@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, useWindowDimensions, View } from 'react-native';
@@ -7,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Glass, Label, PhotoChip, T, Cta } from '@/components/ui';
 import { CLOSET, LOOKS, ME, SHOP } from '@/data/demo';
 import { useTheme } from '@/theme/theme';
-import { PHOTO_BG, PHOTO_GLASS } from '@/theme/tokens';
+import { PHOTO_GLASS } from '@/theme/tokens';
 
 const COPY = [
   { title: 'Scan yourself once', body: 'Prop your phone up and turn around slowly for six seconds. Every try-on uses your real body and face.' },
@@ -24,13 +25,19 @@ export default function WelcomeScreen() {
   const last = step === COPY.length - 1;
   // на низких экранах (iPhone SE) картинка ниже, чтобы текст и кнопки влезли без прокрутки
   const heroH = Math.min(486, Math.round(useWindowDimensions().height * 0.56)) + insets.top - 20;
+  // фото начинается под строкой статуса: иначе голова уходит под вырез, а выше — цвет верхнего края снимка, без шва
+  const photo = { position: 'absolute', top: insets.top, left: 0, right: 0, bottom: 0 } as const;
+  const photoTop = '#222222';
+  const seam = insets.top ? (
+    <LinearGradient pointerEvents="none" colors={[photoTop, 'transparent']} style={{ position: 'absolute', top: insets.top, left: 0, right: 0, height: 24 }} />
+  ) : null;
 
   return (
     <View style={{ flex: 1, backgroundColor: t.bg, gap: 26 }}>
-      <View style={{ height: heroH, backgroundColor: step === 1 ? t.render : PHOTO_BG, borderBottomLeftRadius: 36, borderBottomRightRadius: 36, overflow: 'hidden' }}>
+      <View style={{ height: heroH, backgroundColor: step === 1 ? t.render : photoTop, borderBottomLeftRadius: 36, borderBottomRightRadius: 36, overflow: 'hidden' }}>
         {step === 0 ? (
           <>
-            <Image source={ME.front} contentFit="cover" contentPosition={{ top: '30%', left: '50%' }} style={{ position: 'absolute', inset: 0 }} accessibilityLabel="You, front view from the body scan" />
+            <Image source={ME.front} contentFit="cover" contentPosition={{ top: '15%', left: '50%' }} style={photo} accessibilityLabel="You, front view from the body scan" />
             <View style={{ position: 'absolute', right: 14, bottom: 16, gap: 8 }}>
               {(
                 [
@@ -49,6 +56,7 @@ export default function WelcomeScreen() {
                 </View>
               ))}
             </View>
+            {seam}
             <PhotoChip style={{ position: 'absolute', left: 16, bottom: 18 }}>6-second spin · 4 angles</PhotoChip>
           </>
         ) : null}
@@ -72,11 +80,12 @@ export default function WelcomeScreen() {
 
         {step === 2 ? (
           <>
-            <Image source={ME.front} contentFit="cover" contentPosition={{ top: '30%', left: '50%' }} style={{ position: 'absolute', inset: 0 }} accessible={false} />
-            <View style={{ position: 'absolute', top: 0, bottom: 0, left: '50%', right: 0, overflow: 'hidden' }}>
-              <Image source={LOOKS[0].renders.front} contentFit="cover" contentPosition={{ top: '30%', left: '50%' }} style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: '200%' }} accessibilityLabel="You wearing the new outfit" />
+            <Image source={ME.front} contentFit="cover" contentPosition={{ top: '15%', left: '50%' }} style={photo} accessible={false} />
+            <View style={{ position: 'absolute', top: insets.top, bottom: 0, left: '50%', right: 0, overflow: 'hidden' }}>
+              <Image source={LOOKS[0].renders.front} contentFit="cover" contentPosition={{ top: '15%', left: '50%' }} style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: '200%' }} accessibilityLabel="You wearing the new outfit" />
             </View>
-            <View style={{ position: 'absolute', top: 0, bottom: 0, left: '50%', width: 1.5, marginLeft: -0.75, backgroundColor: 'rgba(255,255,255,0.8)' }} />
+            <View style={{ position: 'absolute', top: insets.top, bottom: 0, left: '50%', width: 1.5, marginLeft: -0.75, backgroundColor: 'rgba(255,255,255,0.8)' }} />
+            {seam}
             <Glass variant="photo" radius={16} style={{ position: 'absolute', left: 22, top: insets.top + 92, width: 92, paddingTop: 10, paddingBottom: 8, alignItems: 'center', gap: 4, transform: [{ rotate: '-6deg' }] }}>
               <Image source={SHOP[0].image} contentFit="contain" style={{ width: 70, height: 70 }} accessibilityLabel="Screenshot of wide-leg jeans" />
               <T size={10} w={500} color={PHOTO_GLASS.text}>

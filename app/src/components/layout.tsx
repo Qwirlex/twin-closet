@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react';
-import { ScrollView, StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Fragment, type ReactNode } from 'react';
+import { Platform, ScrollView, StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/theme/theme';
 
@@ -18,12 +18,18 @@ export function useTabBarBottom(): number {
   return Math.max(16, useSafeAreaInsets().bottom - 12);
 }
 
+// Expo Router на вебе отдаёт нулевые отступы (бережёт гидрацию), и на iPhone «на экране Домой» шапки уходят под часы.
+// Сайт у нас одной страницей без гидрации — меряем env(safe-area-inset-*) сами. В приложении отступы уже настоящие
+const WebSafeArea = Platform.OS === 'web' ? SafeAreaProvider : Fragment;
+
 /** Корневая рамка: фон темы, колонка не шире FRAME_MAX */
 export function AppFrame({ children }: { children: ReactNode }) {
   const { t } = useTheme();
   return (
     <View style={[styles.outer, { backgroundColor: t.scheme === 'dark' ? '#050506' : '#E9E1D4' }]}>
-      <View style={[styles.inner, { backgroundColor: t.bg }]}>{children}</View>
+      <View style={[styles.inner, { backgroundColor: t.bg }]}>
+        <WebSafeArea>{children}</WebSafeArea>
+      </View>
     </View>
   );
 }
