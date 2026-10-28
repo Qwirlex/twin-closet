@@ -68,7 +68,8 @@ and on real photos: `npm run demo:compose -w @twin/server`.
 ## Privacy and data
 
 - The Meta key lives only on the server.
-- Uploaded photos, videos and key frames are deleted after 48 hours; sample results stay as a cache.
+- Uploaded photos, videos and key frames are deleted after 48 hours, on the server and in its private Supabase bucket;
+  sample results stay as a cache.
 - Each device keeps its own wishlist on the server; accounts with owner-only access (Supabase RLS) are prepared
   in `supabase/migrations/`.
 - Product data comes only from the user's own photos and from Muse Spark search results. The app does not scrape store
@@ -85,7 +86,9 @@ Waiting for the hackathon API key: the SAM 3.1, Muse Spark and Muse Image calls 
 
 - `app/` — Expo (React Native) app: iOS, Android and web from one codebase. Design system "Noir" (`docs/design.md`).
 - `server/` — Node + Hono API: uploads, jobs with steps, ffmpeg, try-on compositing, price watch, demo limits.
-  Model prompts and strict JSON schemas: `server/src/models/`.
+  Model prompts and strict JSON schemas: `server/src/models/`. State and files live in Supabase (private table and
+  bucket, `supabase/migrations/0002_server_state.sql`), so a redeploy loses nothing; without Supabase it keeps them in
+  `server/data`. Sized for a 512 MB instance: uploads stream to disk, ffmpeg runs on two threads, one heavy job at a time.
 - `packages/shared/` — types shared by app and server.
 
 ## Run

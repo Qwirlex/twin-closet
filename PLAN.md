@@ -140,9 +140,13 @@ Twin, собирая образ «на ужин в пятницу», берёт 
 - Настоящие аккаунты — Supabase Auth (почта кодом, Google, Apple). Схема базы и правила доступа готовы:
   `supabase/migrations/0001_twin_closet.sql` — вещи, скан тела, образы, вишлист, любимые магазины; каждый видит только своё
   (RLS), фото — в закрытом хранилище `photos/<id владельца>/…`.
-- Нужно от тебя: создать проект Supabase «twin-closet», выполнить файл миграции в SQL Editor, включить вход по почте
-  (и Google/Apple, если нужны), вписать URL и anon key в файлы (`app/.env.local`, `server/.env`) — не в чат.
-  Потом подключаю вход в приложении и проверяю на живом проекте.
+- 28.10: проект Supabase `twin-closet` создан (Frankfurt, бесплатный тариф), миграции 0001 и 0002 выполнены, RLS на всех
+  таблицах, вход по почте включён. Проверено публичным ключом: `server_state` — permission denied, закрытые файлы не видны.
+  URL и publishable key — в `app/.env.local`; секретный ключ (`sb_secret_…`) вписывает пользователь сам в `server/.env`
+  и в Render (мне читать его запрещено). Вход в приложении подключаю следующим шагом.
+- Сервер хранит состояние (задачи, загрузки, вишлисты слежки, цены, распродажи) в `server_state`, а файлы — в закрытом
+  bucket `server-files` (до 50 MB на файл, тариф Free). Рабочая папка на диске сервера — кэш: после деплоя файлы
+  докачиваются из Supabase. 48-часовая очистка стирает и там (`server/src/store.ts`, `supabase.ts`, `cleanup.ts`).
 
 ## 3.3. Сборки и «Поделиться» (подготовлено 27.10)
 
@@ -203,9 +207,19 @@ Twin, собирая образ «на ужин в пятницу», берёт 
   папка для Vercel — `deploy/twin-closet` с `vercel.json` (все пути → `index.html`). Выкладка — `vercel deploy deploy/twin-closet --prod`
   (публичная страница — нужно «да» пользователя).
 - Сервер: **Render** (решение 28.10, вместо Fly.io) — `Dockerfile` (Node 22 + ffmpeg + sharp, только server и shared) и
-  `render.yaml` (Frankfurt, Starter, всегда включён, диск `/data` 1 ГБ, проверка `/health`, автодеплой из GitHub).
+  `render.yaml` (Frankfurt, Starter $7/мес, всегда включён, без диска — данные в Supabase, проверка `/health`, автодеплой из GitHub).
   Шаги Dockerfile проверены локально: 38 пакетов, `node --import tsx`, загрузка, разбор, видео шкафа, вишлист работают.
-  Ключ Meta вписывается в Render вручную (Environment → `MODEL_API_KEY`). Потом веб: `TWIN_API_URL=https://<сервис>.onrender.com npm run build:web`.
+  Секреты вписываются в Render вручную: `SUPABASE_SECRET_KEY`, `MODEL_API_KEY`. Потом веб: `TWIN_API_URL=https://<сервис>.onrender.com npm run build:web`.
+- Хватит ли Starter (512 MB, 0.5 CPU) — замер 28.10 (node + ffmpeg, пик памяти):
+  | Что | Пик | CPU | На Render |
+  |---|---|---|---|
+  | Видео 1080p HEVC 30 с (обычное с iPhone) | 218 MB | 24 с | ~50 с |
+  | Видео 4K HEVC 30 с, 162 MB (худшее) | 328 MB | 60 с | ~2 мин |
+  | Два 4K разом (очередь) | 367 MB | 145 с | ~5 мин на оба |
+  | Склейка примерки 1280 px | 234 MB | — | ~35 с |
+  Чтобы влезло: загрузка пишется на диск потоком (`server/src/multipart.ts`, раньше файл держался в памяти дважды),
+  ffmpeg на 2 потоках (по числу ядер хоста было 812 MB), видео для моделей — 15 кадров/с, тяжёлая работа — по одной
+  (`oneAtATime` в `media.ts`). Если судьям станет медленно — Standard ($25, 1 CPU, 2 GB) переключается в Render за минуту.
 - Лимиты против трат: `LIMIT_UPLOADS_PER_HOUR`, `LIMIT_JOBS_PER_DAY`, `LIMIT_JOBS_PER_DAY_TOTAL` (по умолчанию 30 / 40 / 600).
 
 ### Путь судьи в веб-версии (снимать ничего не нужно)

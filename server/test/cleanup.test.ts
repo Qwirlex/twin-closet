@@ -6,7 +6,7 @@ import { cleanup, retainHours } from '../src/cleanup'
 import { Store } from '../src/store'
 
 describe('privacy cleanup', () => {
-  it('removes old uploads, job files and records but keeps cached samples', () => {
+  it('removes old uploads, job files and records but keeps cached samples', async () => {
     const store = new Store(mkdtempSync(join(tmpdir(), 'twin-clean-')))
     const now = Date.parse('2026-10-30T12:00:00Z')
     const old = new Date(now - 72 * 3_600_000).toISOString()
@@ -20,7 +20,7 @@ describe('privacy cleanup', () => {
     const t = (now - 72 * 3_600_000) / 1000
     utimesSync(join(store.files, 'stray.jpg'), t, t)
 
-    expect(cleanup(store, now, 48)).toEqual({ files: 4, uploads: 1, jobs: 1 })
+    expect(await cleanup(store, now, 48)).toEqual({ files: 4, remote: 0, uploads: 1, jobs: 1 })
     expect(existsSync(join(store.files, 'u-new.jpg'))).toBe(true)
     expect(existsSync(join(store.files, 'j-sample-k0.jpg'))).toBe(true)
     expect(existsSync(join(store.files, 'u-old.jpg'))).toBe(false)

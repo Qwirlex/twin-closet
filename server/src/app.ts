@@ -3,15 +3,17 @@ import { JOB_KINDS, SAMPLES, type JobInput, type JobKind, type LookupQuery, type
 import { getConnInfo } from '@hono/node-server/conninfo'
 import { Hono, type Context } from 'hono'
 import { cors } from 'hono/cors'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { createReadStream, statSync } from 'node:fs'
 import { extname } from 'node:path'
+import { Readable } from 'node:stream'
 import { JobError, type Jobs } from './jobs'
 import type { MetaApi } from './meta'
-import type { Store } from './store'
+import { BadForm, saveFileField, UploadTooLarge } from './multipart'
+import { MIME, type Store } from './store'
 import { Limits, limitsFromEnv, type LimitKind } from './limits'
 import type { PriceWatch, WatchInput } from './watch'
 
-/** Видео шкафа на 30 секунд с телефона — до ~150 MB; больше не принимаем */
+/** Видео шкафа на 30 секунд с телефона — до ~150 MB (4K); больше не принимаем. Пишется на диск потоком, не в память */
 export const MAX_UPLOAD = 300 * 1024 * 1024
 
 const TYPES: Record<string, { kind: Upload['kind']; ext: string }> = {
@@ -23,7 +25,8 @@ const TYPES: Record<string, { kind: Upload['kind']; ext: string }> = {
   'video/webm': { kind: 'video', ext: '.webm' }
 }
 
-const MIME: Record<string, string> = { '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm' }
+// браузер иногда шлёт пустой тип — тогда смотрим на расширение
+const typeOf = (type: string, filename: string) => TYPES[type] ?? Object.values(TYPES).find((t) => t.ext === extname(filename).toLowerCase())
 
 /**
  * Адрес клиента для лимитов. За хостингом — из заголовка, который ставит сам прокси и подделать нельзя:
@@ -43,7 +46,7 @@ function clientIp(c: Context): string {
   }
 }
 
-export function createApp({ store, jobs, meta, watch, limits = new Limits(limitsFromEnv()) }: { store: Store; jobs: Jobs; meta: MetaApi; watch: PriceWatch; limits?: Limits }): Hono {
+export function createApp({ store, jobs, meta, watch, limits = new Limits(limitsFromEnv()), log = console.log }: { store: Store; jobs: Jobs; meta: MetaApi; watch: PriceWatch; limits?: Limits; log?: (m: string) => void }): Hono {
   const app = new Hono()
   app.use('*', cors())
 
@@ -52,24 +55,36 @@ export function createApp({ store, jobs, meta, watch, limits = new Limits(limits
     return r.ok ? null : c.json({ error: r.message, code: 'limit' }, 429, { 'retry-after': String(r.retryAfter) })
   }
 
-  app.get('/health', (c) => c.json({ ok: true, meta: meta.configured }))
+  app.get('/health', (c) => c.json({ ok: true, meta: meta.configured, storage: store.kind }))
 
   app.post('/uploads', async (c) => {
     const over = limited(c, 'upload')
     if (over) return over
-    const size = Number(c.req.header('content-length') ?? 0)
-    if (size > MAX_UPLOAD) return c.json({ error: 'The file is larger than 300 MB.' }, 413)
-    const body = await c.req.parseBody()
-    const file = body.file
-    if (!(file instanceof File)) return c.json({ error: 'Send the file in the "file" field.' }, 400)
-    // браузер иногда шлёт пустой тип — тогда смотрим на расширение
-    const type = TYPES[file.type] ?? Object.values(TYPES).find((t) => t.ext === extname(file.name).toLowerCase())
-    if (!type) return c.json({ error: 'Add a photo (JPEG, PNG, WebP) or a video (MP4, MOV, WebM).' }, 415)
+    const tooLarge = () => c.json({ error: 'The file is larger than 300 MB.' }, 413)
+    if (Number(c.req.header('content-length') ?? 0) > MAX_UPLOAD) return tooLarge()
+    const noFile = () => c.json({ error: 'Send the file in the "file" field.' }, 400)
+    const body = c.req.raw.body
+    if (!body) return noFile()
     const id = store.id()
+    let type: (typeof TYPES)[string] | undefined
+    let file
+    try {
+      file = await saveFileField(body, c.req.header('content-type') ?? '', 'file', MAX_UPLOAD, (f) => {
+        type = typeOf(f.type, f.filename)
+        return type ? store.path(`${id}${type.ext}`) : null
+      })
+    } catch (e) {
+      if (e instanceof UploadTooLarge) return tooLarge()
+      if (e instanceof BadForm) return noFile()
+      throw e
+    }
+    if (!file) return noFile()
+    if (!type || !file.path) return c.json({ error: 'Add a photo (JPEG, PNG, WebP) or a video (MP4, MOV, WebM).' }, 415)
     const name = `${id}${type.ext}`
-    writeFileSync(store.path(name), Buffer.from(await file.arrayBuffer()))
     limits.record(clientIp(c), 'upload')
-    const upload = store.addUpload({ id, kind: type.kind, name: file.name || name, mime: file.type || MIME[type.ext], size: file.size, url: `/files/${name}`, createdAt: new Date().toISOString() })
+    const upload = store.addUpload({ id, kind: type.kind, name: file.filename || name, mime: TYPES[file.type] ? file.type : MIME[type.ext], size: file.size, url: `/files/${name}`, createdAt: new Date().toISOString() })
+    // копия в Supabase — в фоне: задача берёт файл с диска, а копия нужна, если сервер перезапустится до неё
+    void store.keep([name]).catch((e) => log(`Supabase: загрузка ${name} не сохранилась (${e instanceof Error ? e.message : e})`))
     return c.json(upload, 201)
   })
 
@@ -127,15 +142,23 @@ export function createApp({ store, jobs, meta, watch, limits = new Limits(limits
     return c.json({ items: watch.put(d, clean), sales: watch.sales(), meta: meta.configured })
   })
 
-  app.get('/files/:name', (c) => {
+  app.get('/files/:name', async (c) => {
+    const name = c.req.param('name')
     let path: string
     try {
-      path = store.path(c.req.param('name'))
+      path = store.path(name)
     } catch {
       return c.json({ error: 'Bad file name' }, 400)
     }
-    if (!existsSync(path)) return c.json({ error: 'No such file' }, 404)
-    return c.body(readFileSync(path), 200, { 'content-type': MIME[extname(path)] ?? 'application/octet-stream', 'cache-control': 'private, max-age=86400' })
+    // после перезапуска рабочая папка пустая — файл докачивается из Supabase
+    const here = await store.ensure(name).catch((e) => {
+      log(`Supabase: файл ${name} не скачался (${e instanceof Error ? e.message : e})`)
+      return false
+    })
+    if (!here) return c.json({ error: 'No such file' }, 404)
+    // отдаём потоком: видео целиком в память не читаем
+    const stream = Readable.toWeb(createReadStream(path)) as ReadableStream
+    return c.body(stream, 200, { 'content-type': MIME[extname(path).toLowerCase()] ?? 'application/octet-stream', 'content-length': String(statSync(path).size), 'cache-control': 'private, max-age=86400' })
   })
 
   return app

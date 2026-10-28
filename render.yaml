@@ -1,5 +1,6 @@
-# Сервер Twin Closet на Render (решение 28.10): сборка из Dockerfile, всегда включён, диск для данных.
-# Ключ Meta вводится в Render вручную (sync: false) — в репозиторий не попадает.
+# Сервер Twin Closet на Render (решение 28.10): сборка из Dockerfile, всегда включён.
+# Диска нет: состояние и файлы — в Supabase (supabase/migrations/0002_server_state.sql), /data — только рабочая папка.
+# Секреты (ключ Meta, секретный ключ Supabase) вводятся в Render вручную (sync: false) — в репозиторий не попадают.
 services:
   - type: web
     name: twin-closet-api
@@ -10,10 +11,6 @@ services:
     dockerContext: .
     healthCheckPath: /health
     autoDeploy: true
-    disk:
-      name: twin-data
-      mountPath: /data
-      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
@@ -27,5 +24,9 @@ services:
         value: "40"
       - key: LIMIT_JOBS_PER_DAY_TOTAL
         value: "600"
+      - key: SUPABASE_URL
+        value: https://dcdnnaympaslizdvqdcf.supabase.co
+      - key: SUPABASE_SECRET_KEY
+        sync: false
       - key: MODEL_API_KEY
         sync: false

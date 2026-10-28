@@ -5,8 +5,22 @@ import type { MediaInfo } from '@twin/shared'
 
 const run = promisify(execFile)
 
+let lane: Promise<unknown> = Promise.resolve()
+
+/**
+ * Тяжёлая работа (перекодировать видео, склеить примерку) — по одной за раз: 4K-видео с iPhone занимает ~330 MB,
+ * две разом не влезут в 512 MB тарифа. Остальные ждут своей очереди на шаге «Preparing»
+ */
+export function oneAtATime<T>(fn: () => Promise<T>): Promise<T> {
+  const next = lane.then(fn, fn)
+  lane = next.catch(() => {})
+  return next
+}
+
 /** Самая длинная сторона кадров для моделей: больше не нужно, а платим за пиксели и время */
 export const MAX_SIDE = 1280
+/** Кадров в секунду в видео для моделей */
+export const MAX_FPS = 15
 
 interface Probe {
   streams: { codec_type: string; width?: number; height?: number; nb_frames?: string; avg_frame_rate?: string }[]
@@ -30,19 +44,35 @@ export async function probe(path: string): Promise<MediaInfo> {
  * Любое видео (MOV с телефона, WebM из браузера) → MP4 H.264 с faststart, не больше MAX_SIDE, без звука.
  * ffmpeg сам поворачивает по метаданным, поэтому ширина и высота дальше честные — SAM без этого отвечает 400.
  */
-export async function normalizeVideo(input: string, output: string): Promise<MediaInfo> {
-  await run('ffmpeg', [
-    '-y', '-v', 'error', '-i', input,
-    '-vf', `scale='if(gt(iw,ih),min(${MAX_SIDE},iw),-2)':'if(gt(iw,ih),-2,min(${MAX_SIDE},ih))'`,
-    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22', '-pix_fmt', 'yuv420p', '-an', '-movflags', '+faststart',
-    output
-  ])
+export async function normalizeVideo(input: string, output: string, source?: MediaInfo): Promise<MediaInfo> {
+  const t = threads()
+  // 15 кадров в секунду: для медленного прохода камерой SAM хватает, кадров вдвое меньше — дешевле и быстрее.
+  // Реже 15 не трогаем (без выражений в фильтре — в Docker ffmpeg 5.1)
+  const fps = source?.frames && source.duration ? source.frames / source.duration : null
+  const scale = `scale='if(gt(iw,ih),min(${MAX_SIDE},iw),-2)':'if(gt(iw,ih),-2,min(${MAX_SIDE},ih))'`
+  await oneAtATime(() =>
+    run('ffmpeg', [
+      '-y', '-v', 'error', '-threads', t, '-filter_threads', t, '-i', input,
+      '-vf', fps === null || fps > MAX_FPS + 0.5 ? `fps=${MAX_FPS},${scale}` : scale,
+      '-c:v', 'libx264', '-preset', 'superfast', '-crf', '22', '-pix_fmt', 'yuv420p', '-an', '-movflags', '+faststart', '-threads', t,
+      output
+    ])
+  )
   return probe(output)
+}
+
+/**
+ * Потоки ffmpeg. Сам он берёт по числу ядер машины, а хостинг показывает все ядра сервера, хотя даёт пол-ядра:
+ * 4K HEVC с iPhone тогда съедает 800 MB при 512 MB тарифа. Двух потоков хватает, памяти — в разы меньше
+ */
+export function threads(env: Record<string, string | undefined> = process.env): string {
+  const n = Number(env.FFMPEG_THREADS)
+  return String(Number.isInteger(n) && n > 0 ? n : 2)
 }
 
 /** Фото → JPEG не больше MAX_SIDE (WebP, PNG и повёрнутые снимки приводятся к одному виду) */
 export async function normalizeImage(input: string, output: string): Promise<MediaInfo> {
-  await run('ffmpeg', ['-y', '-v', 'error', '-i', input, '-vf', `scale='min(${MAX_SIDE},iw)':-2`, '-frames:v', '1', '-q:v', '3', output])
+  await oneAtATime(() => run('ffmpeg', ['-y', '-v', 'error', '-threads', threads(), '-i', input, '-vf', `scale='min(${MAX_SIDE},iw)':-2`, '-frames:v', '1', '-q:v', '3', output]))
   return probe(output)
 }
 
@@ -52,7 +82,7 @@ export async function keyframes(video: string, duration: number, count: number, 
   for (let i = 0; i < count; i++) {
     const t = duration * ((i + 0.5) / count)
     const file = outPattern(i)
-    await run('ffmpeg', ['-y', '-v', 'error', '-ss', t.toFixed(3), '-i', video, '-frames:v', '1', '-q:v', '3', file])
+    await run('ffmpeg', ['-y', '-v', 'error', '-threads', threads(), '-ss', t.toFixed(3), '-i', video, '-frames:v', '1', '-q:v', '3', file])
     out.push(file)
   }
   return out

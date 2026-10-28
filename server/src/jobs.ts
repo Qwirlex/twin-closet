@@ -71,13 +71,16 @@ interface Source {
   path: string | null
   /** готовые видео и фото кэшируются — судьи не тратят кредиты на одно и то же */
   sample: SampleName | null
+  /** файл загрузки в хранилище: после перезапуска его докачивают из Supabase */
+  upload?: string
 }
 
 export class Jobs {
   constructor(
     private readonly store: Store,
     private readonly meta: MetaApi,
-    private readonly samplesDir: string
+    private readonly samplesDir: string,
+    private readonly log: (m: string) => void = console.log
   ) {}
 
   /** Создаёт задачу и запускает её в фоне; ошибки входа (нет файла, нет готового видео) — сразу исключением */
@@ -125,7 +128,7 @@ export class Jobs {
     if ('uploadId' in input) {
       const u = this.store.upload(input.uploadId)
       if (!u) throw new JobError('bad_input', 'Upload not found. Try adding the file again.')
-      return { path: this.store.path(basename(u.url)), sample: null }
+      return { path: this.store.path(basename(u.url)), sample: null, upload: basename(u.url) }
     }
     const ext = SAMPLE_EXT.find((e) => existsSync(join(this.samplesDir, `${input.sample}${e}`)))
     if (!ext) throw new JobError('bad_input', 'The sample video is not on this server yet.')
@@ -164,6 +167,7 @@ export class Jobs {
     }
 
     try {
+      if (source.upload && !(await this.store.ensure(source.upload))) throw new JobError('bad_input', 'The file is no longer on the server. Add it again.')
       const media = source.path ? await step('prepare', () => this.prepare(id, kind, source.path!)) : null
       if (media) result.media = media
       if (!media) {
@@ -183,6 +187,8 @@ export class Jobs {
       const err = e instanceof JobError ? e : new JobError('internal', e instanceof Error ? e.message : String(e))
       sync({ status: 'failed', progress: err.code === 'no_key' ? 'Waiting for the Meta key' : 'Stopped', error: err.message, errorCode: err.code })
     }
+    // кадры и результаты — в Supabase, чтобы пережили перезапуск сервера (без Supabase ничего не делает)
+    await this.store.keepJobFiles(id).catch((e) => this.log(`Supabase: файлы задачи ${id} не сохранились (${e instanceof Error ? e.message : e})`))
   }
 
   private async prepare(id: string, kind: JobKind, path: string): Promise<MediaInfo> {
@@ -196,7 +202,7 @@ export class Jobs {
     if (info.kind === 'video') {
       if (kind === 'import_item') throw new JobError('bad_input', 'Add a photo or a screenshot of the piece, not a video.')
       if ((info.duration ?? 0) > 120) throw new JobError('bad_input', 'The video is longer than two minutes. Film the rail in one slow pass of about 30 seconds.')
-      return normalizeVideo(path, this.store.path(`${id}.mp4`))
+      return normalizeVideo(path, this.store.path(`${id}.mp4`), info)
     }
     if (kind === 'closet_scan') throw new JobError('bad_input', 'Closet scan needs a video. Film along the rail for about 30 seconds.')
     const out = this.store.path(`${id}.jpg`)
