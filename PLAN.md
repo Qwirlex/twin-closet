@@ -209,7 +209,11 @@ Twin, собирая образ «на ужин в пятницу», берёт 
 - Сервер: **Render** (решение 28.10, вместо Fly.io) — `Dockerfile` (Node 22 + ffmpeg + sharp, только server и shared) и
   `render.yaml` (Frankfurt, Starter $7/мес, всегда включён, без диска — данные в Supabase, проверка `/health`, автодеплой из GitHub).
   Шаги Dockerfile проверены локально: 38 пакетов, `node --import tsx`, загрузка, разбор, видео шкафа, вишлист работают.
-  Секреты вписываются в Render вручную: `SUPABASE_SECRET_KEY`, `MODEL_API_KEY`. Потом веб: `TWIN_API_URL=https://<сервис>.onrender.com npm run build:web`.
+  Секреты вписываются в Render вручную: `SUPABASE_SECRET_KEY`, `MODEL_API_KEY`. Потом веб: `TWIN_API_URL=https://twin-closet-api.onrender.com npm run build:web`.
+- 28.10 сервер выложен: **https://twin-closet-api.onrender.com** (сервис `twin-closet-api`, Blueprint `twin-closet`, автодеплой
+  с `main`). Проверено по https: `/health` → `storage: supabase`, CORS, фото → JPEG за 3 с, видео 6 с 1080p → 720p 15 к/с
+  и 8 кадров за 11 с, файлы в Supabase `server-files/main/`, память ~20% от 512 MB. Ключ Meta — пусто, шаги моделей честно ждут.
+  Готовых видео для судей на Render нет (`server/samples` не в git) — появятся, когда пользователь снимет настоящие.
 - Хватит ли Starter (512 MB, 0.5 CPU) — замер 28.10 (node + ffmpeg, пик памяти):
   | Что | Пик | CPU | На Render |
   |---|---|---|---|
