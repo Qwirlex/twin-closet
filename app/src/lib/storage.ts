@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 
-// Мелкие настройки (тема, пройден ли гайд). На вебе — localStorage, на телефоне пока в памяти до перезапуска
+// Настройки и данные на вебе — localStorage (в приватном режиме браузера — в памяти до перезагрузки).
+// На телефоне вместо этого файла Metro берёт storage.native.ts (SQLite)
 const memory = new Map<string, string>();
 
 function web(): Storage | null {

@@ -4,7 +4,7 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { extname, join } from 'node:path'
-import type { Job, PricePoint, StoreSale, Upload, WatchItem } from '@twin/shared'
+import type { DeviceState, Job, PricePoint, StoreSale, Upload, WatchItem } from '@twin/shared'
 import { MAX_REMOTE_FILE, type RemoteFile, type Supabase } from './supabase'
 
 interface Db {
@@ -16,10 +16,12 @@ interface Db {
   prices: PricePoint[]
   /** распродажи по магазинам и странам */
   sales: StoreSale[]
+  /** шкаф и примерка каждого устройства (общие для компьютера и телефона, подключённого по QR) */
+  devices: (DeviceState & { id: string })[]
 }
 
 type Collection = keyof Db
-const COLLECTIONS: Collection[] = ['uploads', 'jobs', 'watch', 'prices', 'sales']
+const COLLECTIONS: Collection[] = ['uploads', 'jobs', 'watch', 'prices', 'sales', 'devices']
 
 export const MIME: Record<string, string> = { '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm' }
 
@@ -46,7 +48,7 @@ export class Store {
     mkdirSync(this.files, { recursive: true })
     this.dbPath = join(dir, 'db.json')
     const local = !remote && existsSync(this.dbPath) ? (JSON.parse(readFileSync(this.dbPath, 'utf8')) as Partial<Db>) : {}
-    this.db = { uploads: [], jobs: [], watch: [], prices: [], sales: [], ...(saved ?? local) }
+    this.db = { uploads: [], jobs: [], watch: [], prices: [], sales: [], devices: [], ...(saved ?? local) }
     // задачи, которые шли во время перезапуска, уже не доедут
     const stuck = this.db.jobs.filter((j) => j.status === 'queued' || j.status === 'running')
     for (const j of stuck) Object.assign(j, { status: 'failed', error: 'Сервер перезапустился во время задачи', errorCode: 'internal' })
@@ -138,6 +140,28 @@ export class Store {
   setSale(sale: StoreSale): void {
     this.db.sales = [...this.db.sales.filter((s) => !(s.storeId === sale.storeId && s.country === sale.country)), sale]
     this.save('sales')
+  }
+
+  device(id: string): DeviceState | undefined {
+    const d = this.db.devices.find((x) => x.id === id)
+    return d && { updatedAt: d.updatedAt, data: d.data }
+  }
+
+  /** Записывает состояние, если оно новее сохранённого; возвращает то, что теперь на сервере */
+  putDevice(id: string, state: DeviceState): DeviceState {
+    const current = this.device(id)
+    if (current && current.updatedAt >= state.updatedAt) return current
+    this.db.devices = [...this.db.devices.filter((x) => x.id !== id), { id, ...state }]
+    this.save('devices')
+    return state
+  }
+
+  /** Забывает устройства, которые не обновлялись с cutoff (мс) */
+  pruneDevices(cutoff: number): number {
+    const before = this.db.devices.length
+    this.db.devices = this.db.devices.filter((d) => d.updatedAt >= cutoff)
+    if (this.db.devices.length !== before) this.save('devices')
+    return before - this.db.devices.length
   }
 
   /** Убирает записи загрузок и задач, для которых keep вернул false */

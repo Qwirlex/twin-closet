@@ -1,4 +1,4 @@
-import type { Job, JobKind, LookupQuery, PricePoint, SampleName, StoreSale, Upload, WatchItem } from '@twin/shared';
+import type { DeviceState, Job, JobKind, LookupQuery, PricePoint, SampleName, StoreSale, Upload, WatchItem } from '@twin/shared';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
@@ -108,4 +108,14 @@ export function getWatch(): Promise<WatchState> {
 
 export async function getPriceHistory(id: string): Promise<PricePoint[]> {
   return (await call<{ points: PricePoint[] }>(`/watch/${encodeURIComponent(id)}/history`)).points;
+}
+
+/** Раздел устройства на сервере (шкаф, вишлист): общий для компьютера и телефона, подключённого по QR */
+export function getState(slice: string): Promise<DeviceState> {
+  return call(`/state/${slice}`);
+}
+
+/** Сервер берёт, только если новее; в ответ — то, что у него теперь лежит */
+export function putState(slice: string, state: DeviceState): Promise<DeviceState> {
+  return call(`/state/${slice}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(state) });
 }

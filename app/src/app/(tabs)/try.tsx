@@ -1,13 +1,14 @@
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
-import { useState } from 'react';
-import { ActivityIndicator, Pressable, TextInput, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, Platform, Pressable, TextInput, View } from 'react-native';
 
 import { Thumb } from '@/components/garments';
 import { Icon, type IconName } from '@/components/icons';
 import { TabScreen } from '@/components/layout';
 import { Cta, Glass, Label, T, ThemeToggle } from '@/components/ui';
 import type { Item } from '@/data/demo';
+import { isDesktopWeb } from '@/lib/platform';
 import { useShopping } from '@/lib/shopping';
 import { linkPiece, useStore } from '@/lib/store';
 import { useTheme } from '@/theme/theme';
@@ -29,6 +30,30 @@ export default function TryScreen() {
   const [error, setError] = useState<string | null>(null);
   const looks = looksForTryOn();
   const { isWished, toggleWish } = useShopping();
+
+  // на компьютере скриншот можно бросить прямо на страницу (до трёх за раз)
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== 'web') return;
+      const over = (e: DragEvent) => {
+        if (e.dataTransfer?.types.includes('Files')) e.preventDefault();
+      };
+      const drop = (e: DragEvent) => {
+        const files = Array.from(e.dataTransfer?.files ?? []).filter((f) => f.type.startsWith('image/'));
+        if (!files.length) return;
+        e.preventDefault();
+        for (const file of files.slice(0, 3)) {
+          importAsset({ uri: URL.createObjectURL(file), file, mimeType: file.type, fileName: file.name, type: 'image', width: 0, height: 0 } as ImagePicker.ImagePickerAsset, 'Screenshot');
+        }
+      };
+      window.addEventListener('dragover', over);
+      window.addEventListener('drop', drop);
+      return () => {
+        window.removeEventListener('dragover', over);
+        window.removeEventListener('drop', drop);
+      };
+    }, [importAsset])
+  );
 
   async function pick(via: NonNullable<Item['via']>) {
     setError(null);
@@ -130,6 +155,10 @@ export default function TryScreen() {
       {error ? (
         <T size={13} color={t.muted} lh={1.4} accessibilityLiveRegion="polite">
           {error}
+        </T>
+      ) : isDesktopWeb() ? (
+        <T size={13} color={t.muted} lh={1.4}>
+          On a computer, drop a screenshot anywhere on this page.
         </T>
       ) : null}
 

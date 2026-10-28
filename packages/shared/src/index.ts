@@ -208,3 +208,17 @@ export const LIVE_STORE_DOMAINS: Record<(typeof LIVE_STORE_IDS)[number], string>
   bershka: 'bershka.com',
   'pull-and-bear': 'pullandbear.com'
 }
+
+/**
+ * Состояние устройства на сервере: шкаф, примерка и образы, которые человек добавил сам (без демо-аккаунта).
+ * Нужно, чтобы телефон, подключённый к компьютеру по QR, и компьютер видели одно и то же.
+ * Содержимое — дело приложения; сервер хранит как есть и сравнивает только updatedAt
+ */
+export interface DeviceState {
+  /** миллисекунды; новее — значит заменяет */
+  updatedAt: number
+  data: Record<string, unknown>
+}
+
+/** Предел состояния одного устройства (JSON), байт */
+export const MAX_DEVICE_STATE = 256 * 1024

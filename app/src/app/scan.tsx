@@ -1,4 +1,4 @@
-import type { JobKind, SampleName } from '@twin/shared';
+import type { SampleName } from '@twin/shared';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,12 +14,13 @@ import { useFrameWidth } from '@/components/layout';
 import { Cta, Glass, GlassButton, T } from '@/components/ui';
 import { CLOSET, ME } from '@/data/demo';
 import { fileUrl, startJob, uploadAsset, useJob } from '@/lib/api';
+import { isDesktopWeb } from '@/lib/platform';
 import { useStore } from '@/lib/store';
 import { useTheme } from '@/theme/theme';
 import { PHOTO_GLASS } from '@/theme/tokens';
 
-// Скан шкафа и себя. Три пути, чтобы пройти шаг без камеры (судьи с ноутбука):
-// снять видео, загрузить своё или взять готовое видео с сервера.
+// Скан шкафа и себя. Пути, чтобы пройти шаг и без камеры (судьи с ноутбука): снять видео, загрузить своё,
+// взять готовое видео с сервера, а на компьютере — снять телефоном по QR (ход скана виден здесь же).
 
 type Mode = 'rail' | 'single' | 'body';
 
@@ -56,15 +57,17 @@ export default function ScanScreen() {
   const { t } = useTheme();
   const insets = useSafeAreaInsets();
   const width = useFrameWidth();
-  const params = useLocalSearchParams<{ mode?: string }>();
+  // job — скан, запущенный на подключённом телефоне: компьютер показывает его ход
+  const params = useLocalSearchParams<{ mode?: string; job?: string }>();
   const [mode, setMode] = useState<Mode>(params.mode === 'body' ? 'body' : 'rail');
-  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(typeof params.job === 'string' && params.job ? params.job : null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { job, error: pollError } = useJob(jobId);
-  const { addGarments } = useStore();
+  const { addGarments, addScan } = useStore();
+  const desktop = isDesktopWeb();
   const body = mode === 'body';
-  const kind: JobKind = body ? 'body_scan' : 'closet_scan';
+  const kind: 'body_scan' | 'closet_scan' = body ? 'body_scan' : 'closet_scan';
   const copy = COPY[mode];
   const close = () => (router.canGoBack() ? router.back() : router.replace('/'));
 
@@ -73,7 +76,10 @@ export default function ScanScreen() {
     setBusy(label);
     try {
       const id = await start();
-      if (id) setJobId(id);
+      if (id) {
+        setJobId(id);
+        addScan(id, kind);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -199,7 +205,11 @@ export default function ScanScreen() {
                   {copy.hint}
                 </T>
               </View>
-              <Cta title={copy.record} sub={busy ?? copy.recordSub} disabled={!!busy} onPress={() => fromPicker(true)} />
+              {desktop ? (
+                <Cta title="Scan with your phone" sub={busy ?? 'QR code — film on the phone, see it here'} disabled={!!busy} onPress={() => router.push({ pathname: '/connect', params: { to: 'scan', mode: body ? 'body' : 'rail' } })} />
+              ) : (
+                <Cta title={copy.record} sub={busy ?? copy.recordSub} disabled={!!busy} onPress={() => fromPicker(true)} />
+              )}
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 <Option icon="upload" label={copy.upload} disabled={!!busy} onPress={() => fromPicker(false)} />
                 <Option icon="film" label={body ? 'Use a sample' : 'Use sample video'} disabled={!!busy} onPress={fromSample} />

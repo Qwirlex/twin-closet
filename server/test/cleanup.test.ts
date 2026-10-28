@@ -20,7 +20,7 @@ describe('privacy cleanup', () => {
     const t = (now - 72 * 3_600_000) / 1000
     utimesSync(join(store.files, 'stray.jpg'), t, t)
 
-    expect(await cleanup(store, now, 48)).toEqual({ files: 4, remote: 0, uploads: 1, jobs: 1 })
+    expect(await cleanup(store, now, 48)).toEqual({ files: 4, remote: 0, uploads: 1, jobs: 1, devices: 0 })
     expect(existsSync(join(store.files, 'u-new.jpg'))).toBe(true)
     expect(existsSync(join(store.files, 'j-sample-k0.jpg'))).toBe(true)
     expect(existsSync(join(store.files, 'u-old.jpg'))).toBe(false)

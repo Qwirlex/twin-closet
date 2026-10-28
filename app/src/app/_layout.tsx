@@ -45,6 +45,8 @@ function Root() {
         <Stack.Screen name="result" />
         <Stack.Screen name="twin" />
         <Stack.Screen name="stores" />
+        <Stack.Screen name="connect" />
+        <Stack.Screen name="pair" options={{ animation: 'fade' }} />
       </Stack>
     </AppFrame>
   );

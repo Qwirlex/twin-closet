@@ -1,14 +1,16 @@
 import { LIVE_STORE_IDS, type StoreSale, type WatchItem } from '@twin/shared';
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import type { Item, Pic } from '@/data/demo';
+import { CLOSET, SHOP, type Item, type Pic } from '@/data/demo';
 import { deviceCountry } from '@/data/stores';
 import { getWatch, putWatch, type WatchState } from '@/lib/api';
 import { askNotifications, notifyDrops } from '@/lib/notify';
 import { readSetting, writeSetting } from '@/lib/storage';
+import { useSyncedDoc } from '@/lib/sync';
 
 // Любимые магазины, регион и вишлист (docs/spec-stores-wishlist.md).
-// Вишлист живёт на телефоне; вещи живых магазинов уходят на сервер, он проверяет цены (раз в неделю, в распродажу — каждый день).
+// Вишлист и любимые магазины — общий раздел «wishlist» (устройство + сервер, его видит и телефон, подключённый по QR);
+// вещи живых магазинов уходят на сервер, он проверяет цены (раз в неделю, в распродажу — каждый день).
 
 export interface Wish {
   id: string;
@@ -65,19 +67,45 @@ function readJson<T>(key: string, fallback: T): T {
 /** В демо-аккаунте любимые — три живых магазина */
 const DEFAULT_FAVORITES = [...LIVE_STORE_IDS];
 
+interface WishDoc {
+  wishlist: Wish[];
+  favorites: string[];
+}
+
+const DEMO_IMAGES = new Map<string, Pic>([...CLOSET, ...SHOP].map((i) => [i.id, i.image]));
+
+/** Вещь вишлиста из памяти или с другого устройства: картинку демо-вещи берём по id — встроенная ссылка там не откроется */
+function readWish(raw: unknown): Wish | null {
+  const w = raw as Partial<Wish> | null;
+  if (!w || typeof w.id !== 'string' || typeof w.name !== 'string') return null;
+  const uri = (w.image as { uri?: unknown } | undefined)?.uri;
+  const image: Pic = typeof uri === 'string' && uri ? { uri } : (DEMO_IMAGES.get(w.id) ?? { uri: '' });
+  return { meta: '', storeId: null, ref: null, url: null, price: null, currency: null, targetPrice: null, addedAt: new Date(0).toISOString(), ...w, image } as Wish;
+}
+
+function readWishDoc(raw: unknown): WishDoc | null {
+  const d = raw as Partial<Record<keyof WishDoc, unknown>> | null;
+  if (!d || typeof d !== 'object') return null;
+  return {
+    wishlist: Array.isArray(d.wishlist) ? d.wishlist.map(readWish).filter((w): w is Wish => !!w) : [],
+    favorites: Array.isArray(d.favorites) ? d.favorites.filter((x): x is string => typeof x === 'string') : DEFAULT_FAVORITES,
+  };
+}
+
 export function ShoppingProvider({ children }: { children: ReactNode }) {
   const [country, setCountryState] = useState(() => readSetting(KEYS.country) ?? deviceCountry());
-  const [favoriteIds, setFavorites] = useState<string[]>(() => readJson(KEYS.favorites, DEFAULT_FAVORITES));
-  const [wishlist, setWishlist] = useState<Wish[]>(() => readJson(KEYS.wishlist, []));
+  // первый запуск после обновления подхватывает вишлист и магазины из старых ключей
+  const [doc, change] = useSyncedDoc<WishDoc>('wishlist', () => readWishDoc({ wishlist: readJson(KEYS.wishlist, []), favorites: readJson(KEYS.favorites, DEFAULT_FAVORITES) })!, readWishDoc);
+  const wishlist = doc.data.wishlist;
+  const favoriteIds = doc.data.favorites;
+  const setWishlist = useCallback((next: (list: Wish[]) => Wish[]) => change((d) => ({ ...d, wishlist: next(d.wishlist) })), [change]);
+  const setFavorites = useCallback((next: (ids: string[]) => string[]) => change((d) => ({ ...d, favorites: next(d.favorites) })), [change]);
   const [state, setState] = useState<WatchState>({ items: [], sales: [], meta: false });
   const [watchError, setWatchError] = useState<string | null>(null);
   const [seen, setSeen] = useState<string[]>(() => readJson(KEYS.seen, []));
   const first = useRef(true);
 
-  useEffect(() => writeSetting(KEYS.favorites, JSON.stringify(favoriteIds)), [favoriteIds]);
-  useEffect(() => writeSetting(KEYS.wishlist, JSON.stringify(wishlist)), [wishlist]);
-
-  // вишлист на телефоне главный: при каждом изменении отправляем весь список (и пустой — чтобы сервер забыл удалённое),
+  // слежка за ценой: при каждом изменении вишлиста отправляем весь список (и пустой — чтобы сервер забыл удалённое),
   // в ответ сервер отдаёт последние проверки цен
   useEffect(() => {
     const live = wishlist.filter((w) => w.storeId && (LIVE_STORE_IDS as readonly string[]).includes(w.storeId));
@@ -151,7 +179,7 @@ export function ShoppingProvider({ children }: { children: ReactNode }) {
         writeSetting(KEYS.seen, JSON.stringify(keys));
       },
     }),
-    [country, favoriteIds, wishlist, state, watchError, freshDrops]
+    [country, favoriteIds, wishlist, state, watchError, freshDrops, setFavorites, setWishlist]
   );
 
   return <ShoppingContext.Provider value={value}>{children}</ShoppingContext.Provider>;

@@ -10,6 +10,7 @@ import { TabScreen, useFrameWidth } from '@/components/layout';
 import { Glass, GoldRim, Label, PhotoChip, T } from '@/components/ui';
 import { ANGLES, ME } from '@/data/demo';
 import { countryName } from '@/data/stores';
+import { isDesktopWeb } from '@/lib/platform';
 import { useShopping } from '@/lib/shopping';
 import { useStore } from '@/lib/store';
 import { useTheme, type ThemeMode } from '@/theme/theme';
@@ -111,6 +112,23 @@ export default function MeScreen() {
           <Icon name="next" size={18} color={t.muted} />
         </View>
       </Pressable>
+
+      {isDesktopWeb() ? (
+        <Pressable onPress={() => router.push('/connect')} accessibilityRole="button" accessibilityLabel="Continue on your phone: scan with the phone camera, see it here">
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 22, backgroundColor: t.surface, borderWidth: 1, borderColor: t.line }}>
+            <Icon name="phone" size={20} color={t.accent} />
+            <View style={{ flex: 1 }}>
+              <T size={15} w={500}>
+                Continue on your phone
+              </T>
+              <T size={12} color={t.muted}>
+                Film with the phone camera, see it here
+              </T>
+            </View>
+            <Icon name="next" size={18} color={t.muted} />
+          </View>
+        </Pressable>
+      ) : null}
 
       <View style={{ gap: 4 }}>
         <View style={{ flexDirection: 'row', gap: 8 }}>

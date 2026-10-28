@@ -17,7 +17,9 @@ import { FONT } from '@/theme/tokens';
 
 export default function ClosetScreen() {
   const { t } = useTheme();
-  const { closet } = useStore();
+  const { closet, scans, isKnownScan, markScanSeen } = useStore();
+  // скан, начатый на подключённом телефоне и ещё не открытый здесь — показываем, как он прошёл
+  const phoneScan = scans.filter((s) => !isKnownScan(s.jobId)).at(-1);
   const [kind, setKind] = useState<GarmentKind | 'all'>('all');
   const [query, setQuery] = useState<string | null>(null);
   const [view, setView] = useState<'closet' | 'wishlist'>('closet');
@@ -66,6 +68,27 @@ export default function ClosetScreen() {
               <Label accent>Since you were away</Label>
               <T size={14} numberOfLines={2}>
                 {freshDrops.length === 1 ? `${freshDrops[0].name} got cheaper` : `${freshDrops.length} pieces on your wishlist got cheaper`}
+              </T>
+            </View>
+            <Icon name="next" size={18} color={t.muted} />
+          </GoldRim>
+        </Pressable>
+      ) : null}
+
+      {phoneScan ? (
+        <Pressable
+          onPress={() => {
+            markScanSeen(phoneScan.jobId);
+            router.push({ pathname: '/scan', params: { job: phoneScan.jobId, mode: phoneScan.kind === 'body_scan' ? 'body' : 'rail' } });
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={`From your phone: ${phoneScan.kind === 'body_scan' ? 'body scan' : 'closet scan'}. See how it went`}>
+          <GoldRim radius={18} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingLeft: 14, paddingRight: 10 }}>
+            <Icon name="phone" size={20} color={t.accent} />
+            <View style={{ flex: 1, gap: 2 }}>
+              <Label accent>From your phone</Label>
+              <T size={14} numberOfLines={2}>
+                {phoneScan.kind === 'body_scan' ? 'Body scan' : 'Closet scan'} — see how it went
               </T>
             </View>
             <Icon name="next" size={18} color={t.muted} />

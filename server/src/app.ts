@@ -1,5 +1,5 @@
 // HTTP API: загрузки, задачи, файлы. Отдельно от запуска сервера — чтобы гонять в тестах через app.request
-import { JOB_KINDS, SAMPLES, type JobInput, type JobKind, type LookupQuery, type SampleName, type Upload } from '@twin/shared'
+import { JOB_KINDS, MAX_DEVICE_STATE, SAMPLES, type JobInput, type JobKind, type LookupQuery, type SampleName, type Upload } from '@twin/shared'
 import { getConnInfo } from '@hono/node-server/conninfo'
 import { Hono, type Context } from 'hono'
 import { cors } from 'hono/cors'
@@ -142,6 +142,36 @@ export function createApp({ store, jobs, meta, watch, limits = new Limits(limits
       .filter((i) => i && typeof i.id === 'string' && typeof i.storeId === 'string')
       .map((i) => ({ id: i.id, name: String(i.name ?? ''), storeId: i.storeId, ref: i.ref ?? null, url: i.url ?? null, price: typeof i.price === 'number' ? i.price : null, currency: i.currency ?? null, country: String(i.country ?? 'IE'), targetPrice: typeof i.targetPrice === 'number' ? i.targetPrice : null }))
     return c.json({ items: watch.put(d, clean), sales: watch.sales(), meta: meta.configured })
+  })
+
+  // разделы устройства (шкаф, вишлист) — общие для компьютера и телефона, подключённого по QR (тот же x-twin-device).
+  // Разделы хранятся отдельно, чтобы запись одного не затирала другой
+  const slice = (c: Context) => {
+    const d = device(c)
+    const name = c.req.param('slice') ?? ''
+    return d && /^[a-z]{1,20}$/.test(name) ? `${d}/${name}` : null
+  }
+
+  app.get('/state/:slice', (c) => {
+    const key = slice(c)
+    return key ? c.json(store.device(key) ?? { updatedAt: 0, data: {} }) : noDevice(c)
+  })
+
+  app.put('/state/:slice', async (c) => {
+    const key = slice(c)
+    if (!key) return noDevice(c)
+    const raw = await c.req.text()
+    if (raw.length > MAX_DEVICE_STATE) return c.json({ error: 'The closet state is too large.' }, 413)
+    let body: { updatedAt?: unknown; data?: unknown }
+    try {
+      body = JSON.parse(raw)
+    } catch {
+      return c.json({ error: 'Send JSON { updatedAt, data }' }, 400)
+    }
+    const { updatedAt, data } = body
+    if (typeof updatedAt !== 'number' || !Number.isFinite(updatedAt) || !data || typeof data !== 'object' || Array.isArray(data)) return c.json({ error: 'Send JSON { updatedAt, data }' }, 400)
+    // часы телефона могут спешить: время из будущего прижимаем к серверному
+    return c.json(store.putDevice(key, { updatedAt: Math.min(updatedAt, Date.now()), data: data as Record<string, unknown> }))
   })
 
   app.get('/files/:name', async (c) => {

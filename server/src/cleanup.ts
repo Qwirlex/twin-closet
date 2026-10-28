@@ -10,7 +10,10 @@ export function retainHours(env: Record<string, string | undefined> = process.en
   return Number.isFinite(n) && n > 0 ? n : 48
 }
 
-export async function cleanup(store: Store, now = Date.now(), hours = retainHours()): Promise<{ files: number; remote: number; uploads: number; jobs: number }> {
+/** Состояние устройства (шкаф, примерка) живёт дольше фото: неделю без обновлений */
+export const DEVICE_RETAIN_DAYS = 7
+
+export async function cleanup(store: Store, now = Date.now(), hours = retainHours()): Promise<{ files: number; remote: number; uploads: number; jobs: number; devices: number }> {
   const cutoff = now - hours * 3_600_000
   const old = (iso: string) => Date.parse(iso) < cutoff
   const { uploads, jobs } = store.prune(
@@ -35,7 +38,8 @@ export async function cleanup(store: Store, now = Date.now(), hours = retainHour
 
   const gone = (await store.remoteFiles()).filter((f) => !kept(f.name) && (fromRemoved(f.name) || !f.updatedAt || old(f.updatedAt))).map((f) => f.name)
   await store.forget(gone)
-  return { files, remote: gone.length, uploads: uploads.length, jobs: jobs.length }
+  const devices = store.pruneDevices(now - DEVICE_RETAIN_DAYS * 86_400_000)
+  return { files, remote: gone.length, uploads: uploads.length, jobs: jobs.length, devices }
 }
 
 /** При запуске и каждые 6 часов */
@@ -43,7 +47,7 @@ export function scheduleCleanup(store: Store, log: (m: string) => void = console
   const run = async () => {
     try {
       const r = await cleanup(store)
-      if (r.files || r.remote || r.uploads || r.jobs) log(`Очистка: файлов ${r.files}, в Supabase ${r.remote}, загрузок ${r.uploads}, задач ${r.jobs}`)
+      if (r.files || r.remote || r.uploads || r.jobs || r.devices) log(`Очистка: файлов ${r.files}, в Supabase ${r.remote}, загрузок ${r.uploads}, задач ${r.jobs}, устройств ${r.devices}`)
     } catch (e) {
       log(`Очистка: ошибка ${e instanceof Error ? e.message : e}`)
     }
