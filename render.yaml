@@ -11,6 +11,15 @@ services:
     dockerContext: .
     healthCheckPath: /health
     autoDeploy: true
+    # пересобираем только когда меняется сервер, а не приложение или документы
+    buildFilter:
+      paths:
+        - server/**
+        - packages/shared/**
+        - Dockerfile
+        - .dockerignore
+        - package.json
+        - package-lock.json
     envVars:
       - key: NODE_ENV
         value: production

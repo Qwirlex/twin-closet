@@ -115,6 +115,10 @@ Web build for judges: `TWIN_API_URL=https://<server> npm run build:web -w @twin/
 
 Plan and decisions (in Russian): [PLAN.md](PLAN.md).
 
+## License
+
+MIT, see [LICENSE](LICENSE). The brand list keeps its own BSD 3-Clause license (below).
+
 ## Credits
 
 Brand list: [Name Suggestion Index](https://github.com/osmlab/name-suggestion-index) by OpenStreetMap contributors,
