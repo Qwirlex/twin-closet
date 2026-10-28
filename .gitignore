@@ -5,7 +5,7 @@ dist/
 .expo/
 app/ios/
 app/android/
-data/
+/server/data/
 server/samples/*
 !server/samples/README.md
 demo/footage/

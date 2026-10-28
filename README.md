@@ -11,6 +11,8 @@ Muse Voice Transcribe.
 
 ## Try it as a judge (no camera needed)
 
+**Web version: https://twin-closet.vercel.app** (API: https://twin-closet-api.onrender.com/health)
+
 1. Open the web version and tap **Explore the demo account**: a closet, a body scan and two pieces to try are ready.
 2. **Try on → Screenshot**: add any product screenshot from a store. It is cut out, read and compared with the closet.
 3. **Scan → Use sample video**: watch the closet scan run step by step, each step labelled with the Meta model doing it.
