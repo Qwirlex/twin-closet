@@ -55,6 +55,8 @@ export function createApp({ store, jobs, meta, watch, limits = new Limits(limits
     return r.ok ? null : c.json({ error: r.message, code: 'limit' }, 429, { 'retry-after': String(r.retryAfter) })
   }
 
+  // корень API открывают из любопытства (судьи, ссылка из README) — отвечаем, что это и где проверка
+  app.get('/', (c) => c.json({ name: 'Twin Closet API', health: '/health', app: 'https://twin-closet.vercel.app' }))
   app.get('/health', (c) => c.json({ ok: true, meta: meta.configured, storage: store.kind }))
 
   app.post('/uploads', async (c) => {
