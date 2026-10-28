@@ -202,11 +202,10 @@ Twin, собирая образ «на ужин в пятницу», берёт 
 - Веб: `npm run build:web -w @twin/app` (адрес сервера — только из `TWIN_API_URL=https://…`, локальные .env не читаются),
   папка для Vercel — `deploy/twin-closet` с `vercel.json` (все пути → `index.html`). Выкладка — `vercel deploy deploy/twin-closet --prod`
   (публичная страница — нужно «да» пользователя).
-- Сервер: **Fly.io** (решение 27.10) — `Dockerfile` (Node 22 + ffmpeg + sharp, только server и shared), `fly.toml`
-  (Лондон, 1 ГБ, всегда включён, диск `/data`, проверка `/health`). Шаги Dockerfile проверены локально в пустой папке:
-  ставится 38 пакетов, сервер запускается `node --import tsx`, загрузка, разбор, видео шкафа и вишлист работают.
-  Выкладка: `fly launch --copy-config --no-deploy` → `fly volumes create twin_data --region lhr --size 1` → `fly deploy`;
-  ключ Meta — `fly secrets set MODEL_API_KEY=…` (вводит пользователь). Потом веб: `TWIN_API_URL=https://<app>.fly.dev npm run build:web`.
+- Сервер: **Render** (решение 28.10, вместо Fly.io) — `Dockerfile` (Node 22 + ffmpeg + sharp, только server и shared) и
+  `render.yaml` (Frankfurt, Starter, всегда включён, диск `/data` 1 ГБ, проверка `/health`, автодеплой из GitHub).
+  Шаги Dockerfile проверены локально: 38 пакетов, `node --import tsx`, загрузка, разбор, видео шкафа, вишлист работают.
+  Ключ Meta вписывается в Render вручную (Environment → `MODEL_API_KEY`). Потом веб: `TWIN_API_URL=https://<сервис>.onrender.com npm run build:web`.
 - Лимиты против трат: `LIMIT_UPLOADS_PER_HOUR`, `LIMIT_JOBS_PER_DAY`, `LIMIT_JOBS_PER_DAY_TOTAL` (по умолчанию 30 / 40 / 600).
 
 ### Путь судьи в веб-версии (снимать ничего не нужно)

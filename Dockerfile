@@ -1,4 +1,4 @@
-# Сервер Twin Closet для Fly.io: Node 22 + ffmpeg + sharp. Приложение (Expo) в образ не попадает — только server и shared.
+# Сервер Twin Closet (Render): Node 22 + ffmpeg + sharp. Приложение (Expo) в образ не попадает — только server и shared.
 FROM node:22-bookworm-slim
 
 RUN apt-get update \
@@ -28,5 +28,5 @@ ENV NODE_ENV=production \
 
 WORKDIR /srv/server
 EXPOSE 8787
-# node напрямую (не через npm): сигнал остановки от Fly доходит до процесса
+# node напрямую (не через npm): сигнал остановки от хостинга доходит до процесса
 CMD ["node", "--import", "tsx", "src/index.ts"]
