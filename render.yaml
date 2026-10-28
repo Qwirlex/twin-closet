@@ -28,5 +28,8 @@ services:
         value: https://dcdnnaympaslizdvqdcf.supabase.co
       - key: SUPABASE_SECRET_KEY
         sync: false
+      # своё пространство в Supabase; сервер на ПК пишет в dev и данные не перемешиваются
+      - key: SUPABASE_SPACE
+        value: main
       - key: MODEL_API_KEY
         sync: false

@@ -20,18 +20,31 @@ export interface RemoteFile {
   updatedAt: string | null
 }
 
+/**
+ * Пространство в проекте: у сервера на Render — main, у сервера на ПК — dev. Каждый держит состояние в памяти
+ * и пишет его целиком, поэтому в общих строках они затирали бы друг друга. Строки — `<space>/<коллекция>`, файлы — в папке <space>/
+ */
+export const DEFAULT_SPACE = 'main'
+
 export class Supabase {
   constructor(
     readonly url: string,
     private readonly key: string,
-    private readonly fetchImpl: typeof fetch = fetch
-  ) {}
+    private readonly fetchImpl: typeof fetch = fetch,
+    readonly space = DEFAULT_SPACE
+  ) {
+    if (!/^[a-z0-9-]{1,32}$/.test(space)) throw new Error(`SUPABASE_SPACE: только латиница, цифры и дефис, а не «${space}»`)
+  }
 
   /** null — Supabase не настроен, сервер хранит всё у себя в DATA_DIR */
   static fromEnv(env: Record<string, string | undefined> = process.env, fetchImpl: typeof fetch = fetch): Supabase | null {
     const url = env.SUPABASE_URL?.trim().replace(/\/+$/, '')
     const key = env.SUPABASE_SECRET_KEY?.trim()
-    return url && key ? new Supabase(url, key, fetchImpl) : null
+    return url && key ? new Supabase(url, key, fetchImpl, env.SUPABASE_SPACE?.trim() || DEFAULT_SPACE) : null
+  }
+
+  private object(name: string): string {
+    return `${this.space}/${encodeURIComponent(name)}`
   }
 
   private async request(path: string, init: RequestInit = {}, allow: number[] = []): Promise<Response> {
@@ -44,7 +57,9 @@ export class Supabase {
   }
 
   async loadState(): Promise<StateRow[]> {
-    return (await this.request('/rest/v1/server_state?select=key,data')).json() as Promise<StateRow[]>
+    const prefix = `${this.space}/`
+    const rows = (await (await this.request(`/rest/v1/server_state?select=key,data&key=like.${encodeURIComponent(`${prefix}*`)}`)).json()) as StateRow[]
+    return rows.filter((r) => r.key.startsWith(prefix)).map((r) => ({ key: r.key.slice(prefix.length), data: r.data }))
   }
 
   /** Записывает строки целиком (upsert по key) */
@@ -53,18 +68,18 @@ export class Supabase {
     await this.request('/rest/v1/server_state', {
       method: 'POST',
       headers: { 'content-type': 'application/json', prefer: 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify(rows.map((r) => ({ key: r.key, data: r.data, updated_at: at })))
+      body: JSON.stringify(rows.map((r) => ({ key: `${this.space}/${r.key}`, data: r.data, updated_at: at })))
     })
   }
 
   async putFile(name: string, bytes: Uint8Array<ArrayBuffer>, type: string): Promise<void> {
-    await this.request(`/storage/v1/object/${BUCKET}/${encodeURIComponent(name)}`, { method: 'POST', headers: { 'content-type': type, 'x-upsert': 'true' }, body: bytes })
+    await this.request(`/storage/v1/object/${BUCKET}/${this.object(name)}`, { method: 'POST', headers: { 'content-type': type, 'x-upsert': 'true' }, body: bytes })
   }
 
   /** Скачивает файл потоком в dest; false — такого файла нет */
   async download(name: string, dest: string): Promise<boolean> {
     // Storage отвечает на отсутствующий файл то 404, то 400 с «not_found» — оба значат «нет»
-    const res = await this.request(`/storage/v1/object/authenticated/${BUCKET}/${encodeURIComponent(name)}`, {}, [400, 404])
+    const res = await this.request(`/storage/v1/object/authenticated/${BUCKET}/${this.object(name)}`, {}, [400, 404])
     if (!res.ok || !res.body) {
       await res.body?.cancel()
       return false
@@ -82,7 +97,7 @@ export class Supabase {
 
   async removeFiles(names: string[]): Promise<void> {
     for (let i = 0; i < names.length; i += 100) {
-      await this.request(`/storage/v1/object/${BUCKET}`, { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prefixes: names.slice(i, i + 100) }) })
+      await this.request(`/storage/v1/object/${BUCKET}`, { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prefixes: names.slice(i, i + 100).map((n) => `${this.space}/${n}`) }) })
     }
   }
 
@@ -92,10 +107,11 @@ export class Supabase {
       const res = await this.request(`/storage/v1/object/list/${BUCKET}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ prefix: '', limit: 1000, offset, sortBy: { column: 'name', order: 'asc' } })
+        // файлы своего пространства; имена приходят без папки
+        body: JSON.stringify({ prefix: this.space, limit: 1000, offset, sortBy: { column: 'name', order: 'asc' } })
       })
       const page = (await res.json()) as { name: string; id: string | null; updated_at?: string | null; created_at?: string | null }[]
-      // id = null — это папка, у нас их нет
+      // id = null — вложенная папка, у нас их нет
       out.push(...page.filter((f) => f.id !== null).map((f) => ({ name: f.name, updatedAt: f.updated_at ?? f.created_at ?? null })))
       if (page.length < 1000) return out
     }

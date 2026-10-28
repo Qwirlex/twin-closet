@@ -96,7 +96,10 @@ function fakeSupabase() {
     const body = init.body
     const json = () => JSON.parse(String(body))
     const path = url.pathname
-    if (path === '/rest/v1/server_state' && method === 'GET') return Response.json([...state].map(([key, data]) => ({ key, data })))
+    if (path === '/rest/v1/server_state' && method === 'GET') {
+      const like = url.searchParams.get('key')?.replace(/^like\./, '').replace(/\*$/, '') ?? ''
+      return Response.json([...state].filter(([key]) => key.startsWith(like)).map(([key, data]) => ({ key, data })))
+    }
     if (path === '/rest/v1/server_state' && method === 'POST') {
       for (const r of json() as { key: string; data: unknown }[]) state.set(r.key, JSON.parse(JSON.stringify(r.data)))
       return new Response(null, { status: 201 })
@@ -115,8 +118,9 @@ function fakeSupabase() {
       return Response.json([])
     }
     if (path === '/storage/v1/object/list/server-files' && method === 'POST') {
-      const { limit, offset } = json() as { limit: number; offset: number }
-      return Response.json([...files].slice(offset, offset + limit).map(([name, f]) => ({ name, id: name, updated_at: f.updatedAt, created_at: f.updatedAt })))
+      const { limit, offset, prefix } = json() as { limit: number; offset: number; prefix: string }
+      const inFolder = [...files].filter(([name]) => name.startsWith(`${prefix}/`))
+      return Response.json(inFolder.slice(offset, offset + limit).map(([name, f]) => ({ name: name.slice(prefix.length + 1), id: name, updated_at: f.updatedAt, created_at: f.updatedAt })))
     }
     return new Response('not found', { status: 404 })
   }) as typeof fetch
@@ -141,9 +145,25 @@ async function finished(app: Awaited<ReturnType<typeof boot>>['app'], id: string
 }
 
 describe('state and files in Supabase', () => {
-  it('reads env only with both values', () => {
+  it('reads env only with both values; the space is main unless set', () => {
     expect(Supabase.fromEnv({ SUPABASE_URL: 'https://x.supabase.co/' })).toBeNull()
-    expect(Supabase.fromEnv({ SUPABASE_URL: 'https://x.supabase.co/', SUPABASE_SECRET_KEY: ' sb_secret_1 ' })?.url).toBe('https://x.supabase.co')
+    const s = Supabase.fromEnv({ SUPABASE_URL: 'https://x.supabase.co/', SUPABASE_SECRET_KEY: ' sb_secret_1 ' })
+    expect([s?.url, s?.space]).toEqual(['https://x.supabase.co', 'main'])
+    expect(Supabase.fromEnv({ SUPABASE_URL: 'https://x', SUPABASE_SECRET_KEY: 'k', SUPABASE_SPACE: 'dev' })?.space).toBe('dev')
+    expect(() => Supabase.fromEnv({ SUPABASE_URL: 'https://x', SUPABASE_SECRET_KEY: 'k', SUPABASE_SPACE: '../x' })).toThrow(/SUPABASE_SPACE/)
+  })
+
+  it('keeps the server on the computer and the one on Render apart', async () => {
+    const fake = fakeSupabase()
+    const fetchImpl = (fake.supabase as unknown as { fetchImpl: typeof fetch }).fetchImpl
+    const dev = await Store.open(mkdtempSync(join(dir, 'data-')), new Supabase('https://test.supabase.co', 'sb_secret_test', fetchImpl, 'dev'), () => {})
+    const main = await Store.open(mkdtempSync(join(dir, 'data-')), fake.supabase, () => {})
+    dev.setWatch([{ id: 'w-dev' } as never])
+    main.setWatch([{ id: 'w-main' } as never])
+    await Promise.all([dev.flush(), main.flush()])
+    expect([...fake.state.keys()].sort()).toEqual(['dev/watch', 'main/watch'])
+    const again = await Store.open(mkdtempSync(join(dir, 'data-')), fake.supabase, () => {})
+    expect(again.watch().map((w) => w.id)).toEqual(['w-main'])
   })
 
   it('survives a restart with an empty disk: state, files and a retry of an old upload', async () => {
@@ -161,9 +181,9 @@ describe('state and files in Supabase', () => {
     await new Promise((r) => setTimeout(r, 50))
 
     // в Supabase: загрузка, нормализованное фото задачи и состояние с обеими записями
-    expect([...fake.files.keys()].sort()).toEqual([`${job.id}.jpg`, `${upload.id}.png`].sort())
-    expect((fake.state.get('uploads') as Upload[]).map((u) => u.id)).toEqual([upload.id])
-    expect((fake.state.get('jobs') as Job[]).find((j) => j.id === job.id)?.status).toBe('failed')
+    expect([...fake.files.keys()].sort()).toEqual([`main/${job.id}.jpg`, `main/${upload.id}.png`].sort())
+    expect((fake.state.get('main/uploads') as Upload[]).map((u) => u.id)).toEqual([upload.id])
+    expect((fake.state.get('main/jobs') as Job[]).find((j) => j.id === job.id)?.status).toBe('failed')
 
     // новый сервер с пустой рабочей папкой
     const second = await boot(fake.supabase)
@@ -171,7 +191,7 @@ describe('state and files in Supabase', () => {
     const file = await second.app.request(`/files/${job.id}.jpg`)
     expect(file.status).toBe(200)
     expect(file.headers.get('content-type')).toBe('image/jpeg')
-    expect(Buffer.from(await file.arrayBuffer()).equals(fake.files.get(`${job.id}.jpg`)!.bytes)).toBe(true)
+    expect(Buffer.from(await file.arrayBuffer()).equals(fake.files.get(`main/${job.id}.jpg`)!.bytes)).toBe(true)
     expect((await second.app.request('/files/nope.jpg')).status).toBe(404)
     // ключ Meta пришёл — та же загрузка снова в работе: файл докачивается из Supabase
     const retry = await finished(second.app, ((await (await second.app.request('/jobs', { method: 'POST', body: JSON.stringify({ kind: 'import_item', uploadId: upload.id }), headers: { 'content-type': 'application/json' } })).json()) as Job).id)
@@ -185,19 +205,19 @@ describe('state and files in Supabase', () => {
     expect(r.remote).toBe(3)
     expect(fake.files.size).toBe(0)
     await second.store.flush()
-    expect(fake.state.get('uploads')).toEqual([])
+    expect(fake.state.get('main/uploads')).toEqual([])
     expect(fake.calls.some((c) => c.startsWith('DELETE /storage/v1/object/server-files'))).toBe(true)
   }, 60_000)
 
   it('marks jobs cut by a restart as failed and writes that back', async () => {
     const fake = fakeSupabase()
     const now = new Date().toISOString()
-    fake.state.set('jobs', [{ id: 'j1', kind: 'closet_scan', status: 'running', progress: '', percent: 0.5, steps: [], error: null, errorCode: null, result: {}, sample: null, createdAt: now, updatedAt: now }])
-    fake.state.set('unknown', { junk: true })
+    fake.state.set('main/jobs', [{ id: 'j1', kind: 'closet_scan', status: 'running', progress: '', percent: 0.5, steps: [], error: null, errorCode: null, result: {}, sample: null, createdAt: now, updatedAt: now }])
+    fake.state.set('main/unknown', { junk: true })
     const { store } = await boot(fake.supabase)
     expect(store.job('j1')?.status).toBe('failed')
     await store.flush()
-    expect((fake.state.get('jobs') as Job[])[0].errorCode).toBe('internal')
+    expect((fake.state.get('main/jobs') as Job[])[0].errorCode).toBe('internal')
   })
 
   it('retries a failed state write', async () => {
@@ -212,8 +232,8 @@ describe('state and files in Supabase', () => {
     store.setWatch([])
     await store.flush()
     expect(logs[0]).toMatch(/не записалось/)
-    expect(fake.state.has('watch')).toBe(false)
+    expect(fake.state.has('main/watch')).toBe(false)
     await store.flush()
-    expect(fake.state.get('watch')).toEqual([])
+    expect(fake.state.get('main/watch')).toEqual([])
   })
 })
