@@ -222,3 +222,5 @@ export interface DeviceState {
 
 /** Предел состояния одного устройства (JSON), байт */
 export const MAX_DEVICE_STATE = 256 * 1024
+
+export * from './fit'

@@ -9,6 +9,8 @@ export interface GarmentInput {
   /** «wide-leg jeans from a store», «my black hoodie» */
   label: string
   image: Part
+  /** как вещь сядет на этом человеке по зонам (fitPrompt): «tight at the waist; light break at the shoe» */
+  fit?: string
 }
 
 const ANGLE_WORDS: Record<Angle, string> = { front: 'from the front', three_quarter: 'from a three-quarter angle', side: 'from the side', back: 'from the back' }
@@ -16,11 +18,13 @@ const ANGLE_WORDS: Record<Angle, string> = { front: 'from the front', three_quar
 /** Инструкция примерки: та же поза и кадр, меняется только одежда; лицо и руки потом всё равно вклеиваются из оригинала */
 export function tryOnPrompt(garments: GarmentInput[], angle: Angle): string {
   const list = garments.map((g, i) => `garment ${i + 1} (${g.label})`).join(', ')
+  // посадка из расчёта по замерам: без неё модель рисует любую вещь «как на манекене»
+  const fits = garments.flatMap((g, i) => (g.fit ? [`garment ${i + 1} sits ${g.fit}`] : []))
   return `Dress the person in the first photo in ${list}, photographed ${ANGLE_WORDS[angle]}.
 Keep exactly the same person, pose, body shape, framing, camera position, lighting and background as the first photo.
 Change only the clothes: replace what they wear in the zones these garments cover, keep everything else.
 Reproduce each garment faithfully: colour, fabric, print, length, fit and details like buttons, zips and stitching.
-Shoes must sit naturally on both feet. Photorealistic, no text, no logos that are not on the garments.`
+Shoes must sit naturally on both feet. Photorealistic, no text, no logos that are not on the garments.${fits.length ? `\nHow the garments sit on this person, from their measurements: ${fits.join('; ')}.` : ''}`
 }
 
 /** Первый ракурс: Responses API с инструментом image_generation, поиск по картинкам и вебу выключен */
