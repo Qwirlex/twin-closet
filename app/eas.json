@@ -12,11 +12,11 @@
     "preview": {
       "distribution": "internal",
       "android": { "buildType": "apk" },
-      "channel": "preview"
+      "env": { "EXPO_PUBLIC_API_URL": "https://twin-closet-api.onrender.com" }
     },
     "production": {
       "autoIncrement": true,
-      "channel": "production"
+      "env": { "EXPO_PUBLIC_API_URL": "https://twin-closet-api.onrender.com" }
     }
   }
 }

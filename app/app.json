@@ -60,6 +60,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "ab69d574-e997-4711-b6c6-7ab4e60397cd"
+      }
+    },
+    "owner": "watershow"
   }
 }
