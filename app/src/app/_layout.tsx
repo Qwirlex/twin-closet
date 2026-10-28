@@ -42,6 +42,7 @@ function Root() {
         <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
         <Stack.Screen name="login" options={{ animation: 'fade' }} />
         <Stack.Screen name="measurements" options={{ animation: 'fade' }} />
+        <Stack.Screen name="style" options={{ animation: 'fade' }} />
         <Stack.Screen name="scan" options={{ presentation: 'fullScreenModal', contentStyle: { backgroundColor: '#1A1A1C' } }} />
         <Stack.Screen name="result" />
         <Stack.Screen name="twin" />

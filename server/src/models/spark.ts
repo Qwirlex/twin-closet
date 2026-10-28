@@ -209,8 +209,10 @@ export const buildLooks: Task<Looks> = {
   effort: 'high',
   system: `${BASE_RULES}
 You are a calm, practical stylist. You get new pieces the person is considering and their closet (ids, tags, photos),
-sometimes an occasion. Build exactly 3 outfits. Every outfit uses at least one new piece and pieces from the closet,
-one item per body zone (top, bottom or dress, optional outerwear, shoes). Only ids from the lists.
+sometimes an occasion, and their style (styles with weights, colours, styles to leave out). Build exactly 3 outfits.
+Every outfit uses at least one new piece and pieces from the closet, one item per body zone (top, bottom or dress,
+optional outerwear, shoes). Only ids from the lists. Keep outfits in their style; never pair pieces from styles that
+clash (pressed wool trousers with a hoodie) unless they ask.
 "title": 1–2 words (e.g. "Weekend", "Friday dinner"). "note": one sentence why it works, plain and specific.`,
   schema: obj({ looks: arr(obj({ title: str, item_ids: arr(str), note: str })) })
 }

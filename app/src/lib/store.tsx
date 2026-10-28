@@ -1,4 +1,4 @@
-import { cleanBody, fitReport, type BodyMeasurements, type FitReport, type Garment } from '@twin/shared';
+import { cleanBody, cleanStyle, fitReport, type BodyMeasurements, type FitReport, type Garment, type StyleProfile } from '@twin/shared';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
@@ -54,6 +54,9 @@ interface Store {
   setShowSize: (value: boolean) => void;
   /** посадка вещи на человеке; null — у вещи нет замеров */
   fitFor: (item: Item) => FitReport | null;
+  /** профиль стиля из опроса; null — опрос пропущен или стёрт */
+  style: StyleProfile | null;
+  setStyle: (style: StyleProfile | null) => void;
 }
 
 /** Что синхронизируется: только своё. Демо-вещи берутся из приложения — их картинки на другом устройстве не откроются */
@@ -66,6 +69,7 @@ interface ClosetDoc {
   scans: ScanRef[];
   body: BodyMeasurements | null;
   showSize: boolean;
+  style: StyleProfile | null;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -75,7 +79,7 @@ const KNOWN_SCANS = 'twin.knownScans';
 const WAITING_KEY = 'Cut-out and tags come once the Meta key is connected';
 
 // у демо-аккаунта параметры уже заполнены: посадка видна сразу
-const freshDoc = (): ClosetDoc => ({ closetAdded: [], tryOnAdded: [], tryOnDemo: SHOP.map((i) => i.id), savedIds: LOOKS.map((l) => l.id), scans: [], body: DEMO_BODY, showSize: false });
+const freshDoc = (): ClosetDoc => ({ closetAdded: [], tryOnAdded: [], tryOnDemo: SHOP.map((i) => i.id), savedIds: LOOKS.map((l) => l.id), scans: [], body: DEMO_BODY, showSize: false, style: null });
 
 const isStr = (v: unknown): v is string => typeof v === 'string';
 
@@ -102,6 +106,7 @@ function readDoc(raw: unknown): ClosetDoc | null {
     // старый раздел без параметров — демо-цифры; стёртые (null) остаются стёртыми
     body: d.body === undefined ? fresh.body : cleanBody(d.body),
     showSize: d.showSize === true,
+    style: cleanStyle(d.style),
   };
 }
 
@@ -249,6 +254,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const fav = closet.find((c) => c.favorite && c.fit && c.kind === it.kind && c.id !== it.id);
         return fitReport(it.kind, it.fit, { body: doc.data.body, showSize: doc.data.showSize, favorite: fav?.fit ? { name: fav.name.toLowerCase(), fit: fav.fit } : null });
       },
+      style: doc.data.style,
+      setStyle: (style) => change((d) => ({ ...d, style })),
     };
     // change и follow стабильны по смыслу; пересчитываем, когда меняются данные
     // eslint-disable-next-line react-hooks/exhaustive-deps

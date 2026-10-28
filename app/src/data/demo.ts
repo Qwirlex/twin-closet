@@ -1,4 +1,4 @@
-import type { Angle, BodyMeasurements, GarmentFit, GarmentKind } from '@twin/shared';
+import type { Angle, BodyMeasurements, GarmentFit, GarmentKind, StyleId } from '@twin/shared';
 /** Картинка: локальный require (число) или адрес */
 export type Pic = number | { uri: string };
 
@@ -113,6 +113,8 @@ export interface DemoLook {
   renders: Partial<Record<Angle, Pic>>;
   /** почему эти вещи вместе — потом пишет Muse Spark */
   note: string;
+  /** к каким стилям ближе образ — для «в твоём стиле» */
+  styles: StyleId[];
 }
 
 export const LOOKS: DemoLook[] = [
@@ -127,6 +129,7 @@ export const LOOKS: DemoLook[] = [
       back: require('@/assets/demo/look1_back.webp'),
     },
     note: 'Both new pieces with your white sneakers.',
+    styles: ['military', 'skater'],
   },
   {
     id: 'office',
@@ -134,6 +137,7 @@ export const LOOKS: DemoLook[] = [
     itemIds: ['tee', 'widejeans', 'boots'],
     renders: { front: require('@/assets/demo/look2_front.webp') },
     note: 'The wide-leg cut with your grey tee and Chelsea boots.',
+    styles: ['scandi_minimal', 'nineties_minimal'],
   },
   {
     id: 'evening',
@@ -141,12 +145,13 @@ export const LOOKS: DemoLook[] = [
     itemIds: ['bomber', 'blackjeans', 'sneakers'],
     renders: { front: require('@/assets/demo/look3_front.webp') },
     note: 'The bomber over your black jeans.',
+    styles: ['military', 'nineties_minimal'],
   },
 ];
 
 /** Образ только из своих вещей — то, в чём человек на скане */
 export const OWN_LOOKS: DemoLook[] = [
-  { id: 'everyday', title: 'Everyday', itemIds: ['tee', 'blackjeans', 'boots'], renders: { front: ME.front, three_quarter: ME.three_quarter, side: ME.side, back: ME.back }, note: 'What you wore for your scan.' },
+  { id: 'everyday', title: 'Everyday', itemIds: ['tee', 'blackjeans', 'boots'], renders: { front: ME.front, three_quarter: ME.three_quarter, side: ME.side, back: ME.back }, note: 'What you wore for your scan.', styles: ['scandi_minimal', 'normcore'] },
 ];
 
 export const KIND_LABEL: Record<GarmentKind, string> = {

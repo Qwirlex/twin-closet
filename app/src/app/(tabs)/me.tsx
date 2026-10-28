@@ -1,3 +1,4 @@
+import { styleLine } from '@twin/shared';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -20,7 +21,7 @@ const CLEAR = 'rgba(39,39,39,0)';
 
 export default function MeScreen() {
   const { t, mode, setMode } = useTheme();
-  const { setOnboarded, body, showSize, setShowSize } = useStore();
+  const { setOnboarded, body, showSize, setShowSize, style } = useStore();
   const bodyLine = body?.heightCm
     ? [`${body.heightCm} cm`, body.waistCm ? `waist ${body.waistCm}` : null, body.hipsCm ? `hips ${body.hipsCm}` : null].filter(Boolean).join(' · ')
     : 'Not added — fit is less exact';
@@ -102,6 +103,20 @@ export default function MeScreen() {
       </GoldRim>
 
       <View style={{ borderRadius: 22, backgroundColor: t.surface, borderWidth: 1, borderColor: t.line }}>
+        <Pressable onPress={() => router.push('/style')} accessibilityRole="button" accessibilityLabel={`My style: ${style ? styleLine(style) : 'take the style quiz'}`}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: t.line }}>
+            <Icon name="looks" size={20} color={t.accent} />
+            <View style={{ flex: 1 }}>
+              <T size={15} w={500}>
+                My style
+              </T>
+              <T size={12} color={t.muted} numberOfLines={1}>
+                {style ? styleLine(style) : 'Take the quiz · 1 minute'}
+              </T>
+            </View>
+            <Icon name="next" size={18} color={t.muted} />
+          </View>
+        </Pressable>
         <Pressable onPress={() => router.push('/measurements')} accessibilityRole="button" accessibilityLabel={`My measurements: ${bodyLine}`}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: t.line }}>
             <Icon name="ruler" size={20} color={t.accent} />

@@ -1,3 +1,4 @@
+import { STYLES, styleLine, styleMatch } from '@twin/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Linking, Pressable, ScrollView, View } from 'react-native';
@@ -21,7 +22,7 @@ export default function ResultScreen() {
   const insets = useSafeAreaInsets();
   const width = useFrameWidth();
   const { look: lookParam } = useLocalSearchParams<{ look?: string }>();
-  const { item, closet, looksForTryOn, similarOwned, savedIds, toggleSaved, fitFor, showSize } = useStore();
+  const { item, closet, looksForTryOn, similarOwned, savedIds, toggleSaved, fitFor, showSize, style } = useStore();
   const [view, setView] = useState<'look' | 'fit'>('look');
 
   const own = OWN_LOOKS.some((l) => l.id === lookParam);
@@ -38,6 +39,8 @@ export default function ResultScreen() {
   const fresh = pieces.filter((p) => p.via);
   const similar = [...new Map(fresh.flatMap((p) => similarOwned(p)).filter((s) => !look.itemIds.includes(s.id)).map((s) => [s.id, s])).values()];
   const saved = savedIds.includes(look.id);
+  // стили образа, которые есть в профиле человека (и ни одного из «избегаю»)
+  const inStyle = styleMatch(look.styles, style) > 0 ? look.styles.filter((id) => style?.styles.some((s) => s.id === id)) : [];
   // посадка новых вещей образа: только у тех, где есть замеры; первой — вещь с оговоркой
   const fits: FitPiece[] = fresh
     .flatMap((p) => {
@@ -139,6 +142,17 @@ export default function ResultScreen() {
           <T size={13} color={t.muted} lh={1.4}>
             {look.note}
           </T>
+          {style ? (
+            <T size={13} color={inStyle.length ? t.accent : t.muted} lh={1.4} style={{ marginTop: 4 }}>
+              {inStyle.length ? `In your style · ${inStyle.map((id) => STYLES[id].name).join(', ')}` : `Outside your style · ${styleLine(style)}`}
+            </T>
+          ) : (
+            <Pressable onPress={() => router.push('/style')} accessibilityRole="button" style={{ minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' }}>
+              <T size={13} color={t.accent}>
+                Take the style quiz so outfits follow your taste
+              </T>
+            </Pressable>
+          )}
         </View>
 
         {cheaper.length ? (

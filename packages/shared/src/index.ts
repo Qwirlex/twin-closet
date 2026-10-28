@@ -224,3 +224,4 @@ export interface DeviceState {
 export const MAX_DEVICE_STATE = 256 * 1024
 
 export * from './fit'
+export * from './style'

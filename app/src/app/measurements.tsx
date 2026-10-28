@@ -71,7 +71,7 @@ export default function MeasurementsScreen() {
   const insets = useSafeAreaInsets();
   const { first } = useLocalSearchParams<{ first?: string }>();
   const isFirst = first === '1';
-  const { body, setBody, setOnboarded } = useStore();
+  const { body, setBody } = useStore();
   const [units, setUnitsState] = useState<Units>(() => (readSetting(UNITS) === 'in' ? 'in' : 'cm'));
   const [texts, setTexts] = useState<Record<Key, string>>(() => textsFrom(body ?? EMPTY_BODY, units));
   const [tips, setTips] = useState(false);
@@ -96,10 +96,9 @@ export default function MeasurementsScreen() {
   };
 
   const leave = () => {
-    if (isFirst) {
-      setOnboarded(true);
-      router.replace('/');
-    } else if (router.canGoBack()) router.back();
+    // при входе дальше опрос стиля; вход закончится там
+    if (isFirst) router.replace({ pathname: '/style', params: { first: '1' } });
+    else if (router.canGoBack()) router.back();
     else router.replace('/me');
   };
 
