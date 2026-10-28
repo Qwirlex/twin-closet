@@ -9,14 +9,20 @@ them on you from four angles. Your face, hair and hands are never generated: the
 Built for the Meta Global AI Developer Hackathon (Indie track) on SAM 3.1, Muse Spark, Muse Image and
 Muse Voice Transcribe.
 
-## Try it as a judge (no camera needed)
+## Try it as a judge (from a laptop)
 
 **Web version: https://twin-closet.vercel.app** (API: https://twin-closet-api.onrender.com/health)
 
 1. Open the web version and tap **Explore the demo account**: a closet, a body scan and two pieces to try are ready.
-2. **Try on → Screenshot**: add any product screenshot from a store. It is cut out, read and compared with the closet.
-3. **Scan → Use sample video**: watch the closet scan run step by step, each step labelled with the Meta model doing it.
+2. **Try on → Screenshot**: drop any product screenshot from a store onto the page. It is cut out, read and compared
+   with the closet.
+3. **Scan → Scan with your phone**: a QR code opens the same closet on your phone (any phone, in the browser,
+   nothing to install). Film your rail or a slow spin there — the steps run on your laptop screen, each labelled
+   with the Meta model doing it. No phone at hand: **Use sample video**.
 4. **Try on → See it on me**: compare your clothes and the try-on with the slider, turn the angle dial.
+
+On an iPhone, **Share → Add to Home Screen** opens it full screen like an app. Android: the APK from the Expo build
+also takes **Share → Twin Closet** from Instagram or a store app.
 
 Demo limits keep the hackathon credits safe: a few uploads per hour and model jobs per day per visitor;
 sample results are cached and free.
