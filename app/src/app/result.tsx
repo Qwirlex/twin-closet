@@ -4,7 +4,8 @@ import { Linking, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AngleDial } from '@/components/angle-dial';
-import { CompareRender } from '@/components/compare';
+import { CompareRender, photoFrame } from '@/components/compare';
+import { FitLabels, FitSheet, type FitPiece } from '@/components/fit';
 import { SimilarFan } from '@/components/garments';
 import { Icon } from '@/components/icons';
 import { useFrameWidth } from '@/components/layout';
@@ -20,7 +21,8 @@ export default function ResultScreen() {
   const insets = useSafeAreaInsets();
   const width = useFrameWidth();
   const { look: lookParam } = useLocalSearchParams<{ look?: string }>();
-  const { item, looksForTryOn, similarOwned, savedIds, toggleSaved } = useStore();
+  const { item, closet, looksForTryOn, similarOwned, savedIds, toggleSaved, fitFor, showSize } = useStore();
+  const [view, setView] = useState<'look' | 'fit'>('look');
 
   const own = OWN_LOOKS.some((l) => l.id === lookParam);
   const looks = own ? OWN_LOOKS : lookParam ? LOOKS : looksForTryOn();
@@ -36,6 +38,16 @@ export default function ResultScreen() {
   const fresh = pieces.filter((p) => p.via);
   const similar = [...new Map(fresh.flatMap((p) => similarOwned(p)).filter((s) => !look.itemIds.includes(s.id)).map((s) => [s.id, s])).values()];
   const saved = savedIds.includes(look.id);
+  // посадка новых вещей образа: только у тех, где есть замеры; первой — вещь с оговоркой
+  const fits: FitPiece[] = fresh
+    .flatMap((p) => {
+      const report = fitFor(p);
+      return report ? [{ item: p, report, favorite: closet.find((c) => c.favorite && c.kind === p.kind) ?? null }] : [];
+    })
+    .sort((a, b) => b.report.problems - a.report.problems || b.report.zones.length - a.report.zones.length);
+  const fitView = view === 'fit' && fits.length > 0;
+  const top = insets.top + 56;
+  const frame = photoFrame(width);
   const prices = fresh.map((p) => p.shop?.price).filter((p): p is number => typeof p === 'number');
   const urls = fresh.map((p) => p.shop?.url).filter((u): u is string => !!u);
 
@@ -59,15 +71,40 @@ export default function ResultScreen() {
       <CompareRender
         key={look.id}
         width={width}
-        top={insets.top + 56}
+        top={top}
         before={ME[angleKey]}
         after={after}
+        mode={fitView ? 'after' : 'compare'}
         overlay={
-          !after ? (
-            <PhotoChip icon="refresh" style={{ position: 'absolute', alignSelf: 'center', bottom: 18 }}>
-              {ANGLES[angle].label} view renders on request
-            </PhotoChip>
-          ) : null
+          <>
+            {fitView && after && angleKey === 'front' ? <FitLabels pieces={fits} top={top} left={frame.photoLeft} photoW={frame.photoW} photoH={frame.photoH} /> : null}
+            {!after ? (
+              <PhotoChip icon="refresh" style={{ position: 'absolute', alignSelf: 'center', bottom: fits.length ? 70 : 18 }}>
+                {ANGLES[angle].label} view renders on request
+              </PhotoChip>
+            ) : fitView && angleKey !== 'front' ? (
+              <PhotoChip style={{ position: 'absolute', alignSelf: 'center', bottom: 70 }}>Fit labels are on the front view</PhotoChip>
+            ) : null}
+            {fits.length ? (
+              <Glass variant="photo" style={{ position: 'absolute', alignSelf: 'center', bottom: 14, flexDirection: 'row', padding: 3 }}>
+                {(
+                  [
+                    ['look', 'Look'],
+                    ['fit', 'Fit'],
+                  ] as const
+                ).map(([key, label]) => {
+                  const on = view === key;
+                  return (
+                    <Pressable key={key} onPress={() => setView(key)} accessibilityRole="button" accessibilityState={{ selected: on }} accessibilityLabel={key === 'fit' ? 'Show how it fits' : 'Show the look'} style={{ minHeight: 38, paddingHorizontal: 16, borderRadius: 999, justifyContent: 'center', backgroundColor: on ? '#F5F5F4' : 'transparent' }}>
+                      <T size={13} w={on ? 500 : 400} color={on ? '#0B0B0C' : '#E7E5E4'}>
+                        {label}
+                      </T>
+                    </Pressable>
+                  );
+                })}
+              </Glass>
+            ) : null}
+          </>
         }>
         <View style={{ position: 'absolute', top: insets.top + 10, left: 16, right: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <GlassButton variant="photo" icon="back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/try'))} />
@@ -93,7 +130,9 @@ export default function ResultScreen() {
       <View style={{ paddingTop: 14, paddingHorizontal: 20, gap: 14 }}>
         <AngleDial value={angle} onChange={setAngle} rendered={ANGLES.map((a) => !!look.renders[a.key])} />
 
-        <View style={{ gap: 2 }}>
+        {fitView ? <FitSheet key={look.id} pieces={fits} showSize={showSize} /> : null}
+
+        <View style={{ gap: 2, display: fitView ? 'none' : 'flex' }}>
           <T size={15} w={500}>
             {look.title}
           </T>

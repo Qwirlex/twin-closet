@@ -1,4 +1,4 @@
-import type { Angle, GarmentKind } from '@twin/shared';
+import type { Angle, BodyMeasurements, GarmentFit, GarmentKind } from '@twin/shared';
 /** Картинка: локальный require (число) или адрес */
 export type Pic = number | { uri: string };
 
@@ -22,7 +22,29 @@ export interface Item {
   /** uploading → working → готово; waiting — сервер ждёт ключ Meta */
   stage?: 'uploading' | 'working' | 'waiting' | 'failed';
   isNew?: boolean;
+  /** замеры по размерам — для посадки (docs/spec-fit.md); у своих вещей придут из таблицы магазина или по листу A4 */
+  fit?: GarmentFit;
+  /** «сидит идеально»: новые вещи того же вида сравниваются с ней */
+  favorite?: boolean;
 }
+
+/** Параметры демо-человека: судья видит посадку сразу и может поменять цифру в Me */
+export const DEMO_BODY: BodyMeasurements = { heightCm: 183, weightKg: 74, chestCm: 98, waistCm: 80, hipsCm: 96, inseamCm: 84, shoeEu: 43 };
+
+/** Таблица размеров джинсов: обхваты вокруг тела, длина по шву */
+const WIDE_JEANS: GarmentFit = {
+  cut: 'wide',
+  stretch: false,
+  size: 'W32',
+  source: 'demo',
+  sizes: [
+    { size: 'W30', zones: { waist: 74, hips: 99, thigh: 69, inseam: 86 } },
+    { size: 'W31', zones: { waist: 76.5, hips: 101.5, thigh: 70.5, inseam: 86 } },
+    { size: 'W32', zones: { waist: 79, hips: 104, thigh: 72, inseam: 86 } },
+    { size: 'W33', zones: { waist: 82, hips: 107, thigh: 73.5, inseam: 86 } },
+    { size: 'W34', zones: { waist: 84.5, hips: 109.5, thigh: 75, inseam: 86 } },
+  ],
+};
 
 export const ANGLES: { key: Angle; label: string }[] = [
   { key: 'front', label: 'Front' },
@@ -46,14 +68,41 @@ export const CLOSET: Item[] = [
   { id: 'sneakers', name: 'White sneakers', meta: 'Leather · Low', kind: 'shoes', image: require('@/assets/demo/g_sneakers.webp'), isNew: true },
   { id: 'hoodie', name: 'Black hoodie', meta: 'Cotton · Oversize', kind: 'top', image: require('@/assets/demo/g_hoodie.webp') },
   { id: 'tee', name: 'Grey tee', meta: 'Cotton · Regular', kind: 'top', image: require('@/assets/demo/g_tee.webp') },
-  { id: 'blackjeans', name: 'Black jeans', meta: 'Denim · Straight', kind: 'bottom', image: require('@/assets/demo/g_blackjeans.webp') },
+  {
+    id: 'blackjeans',
+    name: 'Black jeans',
+    meta: 'Denim · Straight',
+    kind: 'bottom',
+    image: require('@/assets/demo/g_blackjeans.webp'),
+    favorite: true,
+    fit: { cut: 'regular', stretch: false, size: 'W32', source: 'demo', sizes: [{ size: 'W32', zones: { waist: 82, hips: 98, thigh: 60, inseam: 83 } }] },
+  },
   { id: 'boots', name: 'Chelsea boots', meta: 'Leather · Black', kind: 'shoes', image: require('@/assets/demo/g_boots.webp') },
 ];
 
 /** Вещи, которые человек присматривает в магазинах (демо — без цен и ссылок) */
 export const SHOP: Item[] = [
-  { id: 'widejeans', name: 'Wide-leg jeans', meta: 'Denim · Light wash', kind: 'bottom', image: require('@/assets/demo/g_widejeans.webp'), via: 'Screenshot', shop: { price: null, url: null } },
-  { id: 'bomber', name: 'Olive bomber', meta: 'Nylon · Size M', kind: 'outerwear', image: require('@/assets/demo/g_bomber.webp'), via: 'Scanned in store', shop: { price: null, url: null } },
+  { id: 'widejeans', name: 'Wide-leg jeans', meta: 'Denim · Light wash', kind: 'bottom', image: require('@/assets/demo/g_widejeans.webp'), via: 'Screenshot', shop: { price: null, url: null }, fit: WIDE_JEANS },
+  {
+    id: 'bomber',
+    name: 'Olive bomber',
+    meta: 'Nylon · Relaxed',
+    kind: 'outerwear',
+    image: require('@/assets/demo/g_bomber.webp'),
+    via: 'Scanned in store',
+    shop: { price: null, url: null },
+    fit: {
+      cut: 'relaxed',
+      stretch: false,
+      size: 'M',
+      source: 'demo',
+      sizes: [
+        { size: 'S', zones: { chest: 104 } },
+        { size: 'M', zones: { chest: 112 } },
+        { size: 'L', zones: { chest: 120 } },
+      ],
+    },
+  },
 ];
 
 export interface DemoLook {

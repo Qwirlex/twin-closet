@@ -10,11 +10,18 @@ import { PHOTO_BG, PHOTO_GLASS } from '@/theme/tokens';
 
 const CLEAR = 'rgba(39,39,39,0)';
 
+/** Где фото внутри рендера: 92% ширины по центру, 3:4 — по этим размерам ставятся метки посадки */
+export function photoFrame(width: number): { photoW: number; photoH: number; photoLeft: number } {
+  const photoW = width * 0.92;
+  return { photoW, photoH: (photoW * 4) / 3, photoLeft: width * 0.04 };
+}
+
 /**
  * Рендер «до / после» на всю ширину: фото 3:4, слева твоя одежда, справа примерка.
  * Вертикальная линия со стеклянной ручкой тянется пальцем; края фото гаснут в фон.
+ * mode="after" — только примерка, без линии (поверх — метки посадки)
  */
-export function CompareRender({ width, top = 80, before, after, overlay, children }: { width: number; top?: number; before: Pic; after: Pic | null; overlay?: ReactNode; children?: ReactNode }) {
+export function CompareRender({ width, top = 80, before, after, mode = 'compare', overlay, children }: { width: number; top?: number; before: Pic; after: Pic | null; mode?: 'compare' | 'after'; overlay?: ReactNode; children?: ReactNode }) {
   const [split, setSplit] = useState(52);
   const splitRef = useRef(split);
   splitRef.current = split;
@@ -22,11 +29,10 @@ export function CompareRender({ width, top = 80, before, after, overlay, childre
   const widthRef = useRef(width);
   widthRef.current = width;
 
-  const photoW = width * 0.92;
-  const photoH = (photoW * 4) / 3;
-  const photoLeft = width * 0.04;
+  const { photoW, photoH, photoLeft } = photoFrame(width);
   const height = top + photoH;
-  const clip = Math.max(0, Math.min(photoW, (split / 100) * width - photoLeft));
+  const compare = mode === 'compare' && !!after;
+  const clip = compare ? Math.max(0, Math.min(photoW, (split / 100) * width - photoLeft)) : 0;
 
   const pan = useRef(
     PanResponder.create({
@@ -64,7 +70,7 @@ export function CompareRender({ width, top = 80, before, after, overlay, childre
       </View>
       <LinearGradient pointerEvents="none" colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.5)']} style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 110 }} />
 
-      {after ? (
+      {compare ? (
         <>
           <View pointerEvents="none" style={{ position: 'absolute', top: top + 32, bottom: 0, left: `${split}%`, width: 1.5, marginLeft: -0.75, backgroundColor: 'rgba(255,255,255,0.8)' }}>
             <Glass variant="photo" style={{ position: 'absolute', top: '46%', left: -21.25, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>

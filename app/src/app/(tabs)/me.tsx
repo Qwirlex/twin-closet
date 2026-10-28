@@ -20,7 +20,10 @@ const CLEAR = 'rgba(39,39,39,0)';
 
 export default function MeScreen() {
   const { t, mode, setMode } = useTheme();
-  const { setOnboarded } = useStore();
+  const { setOnboarded, body, showSize, setShowSize } = useStore();
+  const bodyLine = body?.heightCm
+    ? [`${body.heightCm} cm`, body.waistCm ? `waist ${body.waistCm}` : null, body.hipsCm ? `hips ${body.hipsCm}` : null].filter(Boolean).join(' · ')
+    : 'Not added — fit is less exact';
   const { favoriteIds, country } = useShopping();
   const [angle, setAngle] = useState(0);
   const heroW = useFrameWidth() - 40;
@@ -97,6 +100,38 @@ export default function MeScreen() {
           })}
         </View>
       </GoldRim>
+
+      <View style={{ borderRadius: 22, backgroundColor: t.surface, borderWidth: 1, borderColor: t.line }}>
+        <Pressable onPress={() => router.push('/measurements')} accessibilityRole="button" accessibilityLabel={`My measurements: ${bodyLine}`}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: t.line }}>
+            <Icon name="ruler" size={20} color={t.accent} />
+            <View style={{ flex: 1 }}>
+              <T size={15} w={500}>
+                My measurements
+              </T>
+              <T size={12} color={t.muted}>
+                {bodyLine}
+              </T>
+            </View>
+            <Icon name="next" size={18} color={t.muted} />
+          </View>
+        </Pressable>
+        <Pressable onPress={() => setShowSize(!showSize)} accessibilityRole="switch" accessibilityState={{ checked: showSize }} accessibilityLabel="Show my size">
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 16 }}>
+            <View style={{ flex: 1 }}>
+              <T size={15} w={500}>
+                Show my size
+              </T>
+              <T size={12} color={t.muted}>
+                {showSize ? 'Sizes appear in fit advice' : 'Off: no S, M, L or size numbers anywhere'}
+              </T>
+            </View>
+            <View style={{ width: 48, height: 28, borderRadius: 14, padding: 3, backgroundColor: showSize ? t.accent : t.surface2, alignItems: showSize ? 'flex-end' : 'flex-start' }}>
+              <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: showSize ? t.onAccent : t.muted }} />
+            </View>
+          </View>
+        </Pressable>
+      </View>
 
       <Pressable onPress={() => router.push('/stores')} accessibilityRole="button" accessibilityLabel={`My stores: ${favoriteIds.length}, region ${countryName(country)}`}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 22, backgroundColor: t.surface, borderWidth: 1, borderColor: t.line }}>

@@ -7,7 +7,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, LogoMark } from '@/components/icons';
 import { Glass, T } from '@/components/ui';
 import { HERO_LOGIN } from '@/data/demo';
-import { useStore } from '@/lib/store';
 import { useTheme } from '@/theme/theme';
 import { PHOTO_GLASS } from '@/theme/tokens';
 
@@ -16,15 +15,12 @@ import { PHOTO_GLASS } from '@/theme/tokens';
 export default function LoginScreen() {
   const { t } = useTheme();
   const insets = useSafeAreaInsets();
-  const { setOnboarded } = useStore();
   const dark = t.scheme === 'dark';
   const glass = dark ? PHOTO_GLASS : { ...t.glass, colors: ['rgba(253,251,247,0.92)', 'rgba(239,232,220,0.78)'] as [string, string] };
   const sub = dark ? '#C9C3BB' : t.muted;
 
-  const enter = () => {
-    setOnboarded(true);
-    router.replace('/');
-  };
+  // дальше — параметры тела для посадки; вход завершается там (сохранить или пропустить)
+  const enter = () => router.replace({ pathname: '/measurements', params: { first: '1' } });
 
   return (
     <View style={{ flex: 1, backgroundColor: t.bg, paddingTop: insets.top + 14, paddingHorizontal: 24, paddingBottom: insets.bottom + 26 }}>

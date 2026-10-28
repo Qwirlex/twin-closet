@@ -12,6 +12,8 @@ export interface Palette {
   text: string;
   muted: string;
   accent: string;
+  /** тёплая глина: «не сядет», ошибка в поле — вместо красного */
+  warn: string;
   onAccent: string;
   ctaBg: string;
   ctaText: string;
@@ -49,6 +51,9 @@ export const PHOTO_GLASS: Glass = {
 
 export const RECORD_RED = '#E5484D';
 
+/** Метки посадки поверх фото — фото всегда тёмное: золото «как задумано», глина «не сядет», светлый «к сведению» */
+export const FIT_ON_PHOTO = { good: '#C8B68A', problem: '#D9906E', note: '#E7E5E4' } as const;
+
 export const PALETTES: Record<Scheme, Palette> = {
   dark: {
     scheme: 'dark',
@@ -60,6 +65,7 @@ export const PALETTES: Record<Scheme, Palette> = {
     text: '#F5F5F4',
     muted: '#A8A29E',
     accent: '#C8B68A',
+    warn: '#D9906E',
     onAccent: '#0B0B0C',
     ctaBg: '#F5F5F4',
     ctaText: '#0B0B0C',
@@ -93,6 +99,7 @@ export const PALETTES: Record<Scheme, Palette> = {
     text: '#1B1712',
     muted: '#5E554A',
     accent: '#7A6638',
+    warn: '#9A4B2B',
     onAccent: '#FFFFFF',
     ctaBg: '#1B1712',
     ctaText: '#F3EDE3',

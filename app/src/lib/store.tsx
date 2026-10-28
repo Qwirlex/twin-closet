@@ -1,8 +1,8 @@
-import type { Garment } from '@twin/shared';
+import { cleanBody, fitReport, type BodyMeasurements, type FitReport, type Garment } from '@twin/shared';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { CLOSET, LOOKS, OWN_LOOKS, SHOP, type DemoLook, type Item } from '@/data/demo';
+import { CLOSET, DEMO_BODY, LOOKS, OWN_LOOKS, SHOP, type DemoLook, type Item } from '@/data/demo';
 import { STORES } from '@/data/stores';
 import { fileUrl, getJob, startJob, uploadAsset } from '@/lib/api';
 import { readSetting, writeSetting } from '@/lib/storage';
@@ -46,6 +46,14 @@ interface Store {
   removeFromTryOn: (id: string) => void;
   toggleSaved: (lookId: string) => void;
   setOnboarded: (value: boolean) => void;
+  /** параметры тела; null — человек их стёр или не вводил */
+  body: BodyMeasurements | null;
+  setBody: (body: BodyMeasurements | null) => void;
+  /** «Show my size» в Me: по умолчанию выключено — нигде нет S/M/L */
+  showSize: boolean;
+  setShowSize: (value: boolean) => void;
+  /** посадка вещи на человеке; null — у вещи нет замеров */
+  fitFor: (item: Item) => FitReport | null;
 }
 
 /** Что синхронизируется: только своё. Демо-вещи берутся из приложения — их картинки на другом устройстве не откроются */
@@ -56,6 +64,8 @@ interface ClosetDoc {
   tryOnDemo: string[];
   savedIds: string[];
   scans: ScanRef[];
+  body: BodyMeasurements | null;
+  showSize: boolean;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -64,7 +74,8 @@ const KNOWN_SCANS = 'twin.knownScans';
 
 const WAITING_KEY = 'Cut-out and tags come once the Meta key is connected';
 
-const freshDoc = (): ClosetDoc => ({ closetAdded: [], tryOnAdded: [], tryOnDemo: SHOP.map((i) => i.id), savedIds: LOOKS.map((l) => l.id), scans: [] });
+// у демо-аккаунта параметры уже заполнены: посадка видна сразу
+const freshDoc = (): ClosetDoc => ({ closetAdded: [], tryOnAdded: [], tryOnDemo: SHOP.map((i) => i.id), savedIds: LOOKS.map((l) => l.id), scans: [], body: DEMO_BODY, showSize: false });
 
 const isStr = (v: unknown): v is string => typeof v === 'string';
 
@@ -88,6 +99,9 @@ function readDoc(raw: unknown): ClosetDoc | null {
     tryOnDemo: ids(d.tryOnDemo, fresh.tryOnDemo),
     savedIds: ids(d.savedIds, fresh.savedIds),
     scans: Array.isArray(d.scans) ? (d.scans as ScanRef[]).filter((s) => s && isStr(s.jobId) && (s.kind === 'closet_scan' || s.kind === 'body_scan') && typeof s.at === 'number') : [],
+    // старый раздел без параметров — демо-цифры; стёртые (null) остаются стёртыми
+    body: d.body === undefined ? fresh.body : cleanBody(d.body),
+    showSize: d.showSize === true,
   };
 }
 
@@ -225,6 +239,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setOnboarded: (v) => {
         setOnboardedState(v);
         writeSetting(ONBOARDED, v ? '1' : null);
+      },
+      body: doc.data.body,
+      setBody: (body) => change((d) => ({ ...d, body })),
+      showSize: doc.data.showSize,
+      setShowSize: (v) => change((d) => ({ ...d, showSize: v })),
+      fitFor: (it) => {
+        if (!it.fit) return null;
+        const fav = closet.find((c) => c.favorite && c.fit && c.kind === it.kind && c.id !== it.id);
+        return fitReport(it.kind, it.fit, { body: doc.data.body, showSize: doc.data.showSize, favorite: fav?.fit ? { name: fav.name.toLowerCase(), fit: fav.fit } : null });
       },
     };
     // change и follow стабильны по смыслу; пересчитываем, когда меняются данные
