@@ -1,6 +1,9 @@
 // SAM 3.1: подсказки и разбор ответа (docs/meta-api.md, «SAM 3.1»).
-// Рамки разбираем сами; растры масок (base85) декодирует официальный @meta-sam/parser — подключим, когда разрешат установку.
+// Текст подсказок собирает и ответ разбирает официальный @meta-sam/parser; здесь — только перевод в наши типы
+// и маска размером с кадр для склейки примерки (tryon/raster.ts)
+import { buildObjectPrompt, decodeMaskToRaster, parseImageStream, parseVideoStream, recordsOfKind, type SegmentationMaskRecord } from '@meta-sam/parser'
 import { MODELS } from '../meta'
+import { mask, type Mask } from '../tryon/raster'
 
 /** Подсказка-понятие: одна короткая фраза-существительное на запрос («t-shirt», не списки через запятую) */
 export function conceptPrompt(noun: string): string {
@@ -12,32 +15,33 @@ export function conceptPrompt(noun: string): string {
 export interface ObjectPrompt {
   /** наш номер объекта: он вернётся в ответе и держится через кадры видео */
   id: number
+  /** рамка в пикселях кадра; правая и нижняя граница — не включительно (как у рамок в ответе) */
   box?: { x1: number; y1: number; x2: number; y2: number }
   /** точки: positive — «это объект», negative — «это не объект» */
   points?: { x: number; y: number; negative?: boolean }[]
 }
 
 /**
- * Рамки и точки с нашими id, до 16 объектов: `<0f>1<|box;x1=..;y1=..;x2=..;y2=..;w=W;h=H|>,2<|point;x=..;y=..;w=W;h=H|>`.
- * Координаты — пиксели исходника, w/h — размер кадра после поворота (иначе 400).
+ * Рамки и точки с нашими id, до 16 объектов за запрос. Координаты — пиксели кадра после поворота
+ * (иначе SAM отвечает 400); дробные округляем и прижимаем к кадру — официальный сборщик принимает только целые внутри
  */
 export function objectPrompt(objects: ObjectPrompt[], width: number, height: number, frame = 0): string {
   if (!objects.length) throw new Error('No objects for SAM')
   if (objects.length > 16) throw new Error('SAM takes at most 16 objects per request — split into groups')
-  const size = `w=${width};h=${height}`
-  const r = Math.round
-  return (
-    `<${frame}f>` +
-    objects
-      .map((o) => {
-        const parts: string[] = []
-        if (o.box) parts.push(`<|box;x1=${r(o.box.x1)};y1=${r(o.box.y1)};x2=${r(o.box.x2)};y2=${r(o.box.y2)};${size}|>`)
-        for (const p of o.points ?? []) parts.push(`${p.negative ? '-' : ''}<|point;x=${r(p.x)};y=${r(p.y)};${size}|>`)
-        if (!parts.length) throw new Error(`SAM object ${o.id} has no box or points`)
-        return `${o.id}${parts.join('')}`
-      })
-      .join(',')
-  )
+  const clamp = (v: number, max: number) => Math.min(max, Math.max(0, Math.round(v)))
+  return buildObjectPrompt({
+    size: { width, height },
+    objects: objects.map((o) => ({
+      id: o.id,
+      prompts: [
+        {
+          frame,
+          box: o.box && { left: clamp(o.box.x1, width - 1), top: clamp(o.box.y1, height - 1), right: clamp(o.box.x2, width), bottom: clamp(o.box.y2, height) },
+          points: o.points?.map((p) => ({ x: clamp(p.x, width - 1), y: clamp(p.y, height - 1), label: p.negative ? ('negative' as const) : ('positive' as const) }))
+        }
+      ]
+    }))
+  })
 }
 
 /** Тело запроса: картинка (data: URL / URL) или видео (file_id из /files) */
@@ -55,41 +59,76 @@ export function samRequest(prompt: string, media: { imageUrl: string } | { video
   }
 }
 
-export interface SamRecord {
+export interface SamObject {
+  /** кадр видео; у картинки — 0 */
   frame: number
   id: number
-  box: { x1: number; y1: number; x2: number; y2: number; w: number; h: number; c: number | null } | null
-  /** закодированная маска как есть — декодирует @meta-sam/parser */
-  mask: string | null
+  /** правая и нижняя граница не включительно */
+  box: { x1: number; y1: number; x2: number; y2: number } | null
+  confidence: number | null
+  /** маска как пришла — в растр кадра переводит samMask */
+  mask: SegmentationMaskRecord | null
+}
+
+export interface SamResult {
+  objects: SamObject[]
+  /** предупреждения разбора (битая строка, неизвестный токен) — в лог, не в ошибку */
+  warnings: string[]
 }
 
 /**
- * Разбор текста ответа: по строке на кадр, `<Nf>id<|box;…|><|mask;…|>,id…`. Кадры могут идти не по порядку и пропускаться —
- * ключуем по <Nf>. Значения рамки бывают и «x1=10», и просто по порядку — понимаем оба.
+ * Разбор ответа SAM официальным парсером. Ответ у нас не потоковый — отдаём парсеру весь текст одним событием.
+ * Кадры могут идти не по порядку и пропускаться: объект ключуем по (кадр, id)
  */
-export function parseSam(text: string): SamRecord[] {
-  const out: SamRecord[] = []
-  for (const line of text.split(/\r?\n/)) {
-    const fm = line.match(/^\s*<(\d+)f>/)
-    if (!fm) continue
-    const frame = Number(fm[1])
-    const body = line.slice(fm[0].length)
-    for (const m of body.matchAll(/(?:^|,)\s*(\d+)((?:<\|[^|]*(?:\|(?!>)[^|]*)*\|>)+)/g)) {
-      const id = Number(m[1])
-      const segs = [...m[2].matchAll(/<\|([^|]*(?:\|(?!>)[^|]*)*)\|>/g)].map((s) => s[1])
-      const boxSeg = segs.find((s) => s.startsWith('box;'))
-      const maskSeg = segs.find((s) => s.startsWith('mask;'))
-      out.push({ frame, id, box: boxSeg ? parseBox(boxSeg) : null, mask: maskSeg ?? null })
+export async function parseSam(text: string, media: 'image' | 'video'): Promise<SamResult> {
+  async function* events() {
+    yield { type: 'response.output_text.delta', item_id: 'sam', output_index: 0, content_index: 0, delta: text }
+    yield { type: 'response.output_text.done', item_id: 'sam', output_index: 0, content_index: 0, text }
+    yield { type: 'response.completed' }
+  }
+  const result = await (media === 'video' ? parseVideoStream(events()) : parseImageStream(events())).finalResult
+  const byKey = new Map<string, SamObject>()
+  const get = (frame: number, id: number) => {
+    const key = `${frame}:${id}`
+    let o = byKey.get(key)
+    if (!o) byKey.set(key, (o = { frame, id, box: null, confidence: null, mask: null }))
+    return o
+  }
+  for (const b of recordsOfKind(result.records, 'box')) {
+    const o = get(b.frame?.frameIndex ?? 0, Number(b.objectId))
+    o.box = { x1: b.left, y1: b.top, x2: b.right, y2: b.bottom }
+    o.confidence = b.confidence ?? o.confidence
+  }
+  for (const m of recordsOfKind(result.records, 'mask')) {
+    const o = get(m.frame?.frameIndex ?? 0, Number(m.objectId))
+    o.mask = m
+    o.box ??= { x1: m.bounds.left, y1: m.bounds.top, x2: m.bounds.right, y2: m.bounds.bottom }
+    o.confidence = m.confidence ?? o.confidence
+  }
+  return {
+    objects: [...byKey.values()].sort((a, b) => a.frame - b.frame || a.id - b.id),
+    warnings: result.diagnostics.map((d) => `${d.severity} ${d.code}: ${d.message}`)
+  }
+}
+
+/**
+ * Маска объекта во весь кадр (0/1). Растр SAM покрывает только рамку объекта и может быть мельче её —
+ * растягиваем по ближайшему пикселю в рамку, остальное — ноль
+ */
+export function samMask(record: SegmentationMaskRecord, width: number, height: number): Mask {
+  const raster = decodeMaskToRaster(record.mask)
+  const { width: rw, height: rh } = record.mask
+  const { left, top, right, bottom } = record.bounds
+  const out = mask(width, height)
+  const bw = right - left
+  const bh = bottom - top
+  if (bw <= 0 || bh <= 0) return out
+  for (let y = Math.max(0, top); y < Math.min(height, bottom); y++) {
+    const ry = Math.min(rh - 1, Math.floor(((y - top) * rh) / bh))
+    for (let x = Math.max(0, left); x < Math.min(width, right); x++) {
+      const rx = Math.min(rw - 1, Math.floor(((x - left) * rw) / bw))
+      out.data[y * width + x] = raster[ry * rw + rx]
     }
   }
   return out
-}
-
-function parseBox(seg: string): SamRecord['box'] {
-  const vals = seg.split(';').slice(1)
-  const named = Object.fromEntries(vals.filter((v) => v.includes('=')).map((v) => v.split('=') as [string, string]))
-  const plain = vals.filter((v) => !v.includes('=')).map(Number)
-  const get = (key: string, i: number) => Number(named[key] ?? plain[i])
-  const box = { x1: get('x1', 0), y1: get('y1', 1), x2: get('x2', 2), y2: get('y2', 3), w: get('w', 4), h: get('h', 5), c: named.c !== undefined || plain[6] !== undefined ? get('c', 6) : null }
-  return [box.x1, box.y1, box.x2, box.y2].every(Number.isFinite) ? box : null
 }

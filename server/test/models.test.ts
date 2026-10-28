@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { Jobs } from '../src/jobs'
 import { MetaApi, MetaError, outputText } from '../src/meta'
 import { nextAngleRequest, tryOnRequest } from '../src/models/image'
-import { objectPrompt, parseSam, samRequest, conceptPrompt } from '../src/models/sam'
+import { conceptPrompt, objectPrompt, parseSam, samMask, samRequest } from '../src/models/sam'
 import * as spark from '../src/models/spark'
 import { TWIN_TOOLS, twinRequest } from '../src/models/twin'
 import { Store } from '../src/store'
@@ -76,10 +76,13 @@ describe('Muse Spark tasks', () => {
 })
 
 describe('SAM 3.1', () => {
-  it('writes box and point prompts with our ids and the frame size', () => {
+  it('writes box and point prompts with our ids and the frame size (official builder)', () => {
+    // правая и нижняя граница рамки не включительно: x2=110 уходит в SAM как 109
     expect(objectPrompt([{ id: 1, box: { x1: 10, y1: 20, x2: 110.4, y2: 220 } }, { id: 2, points: [{ x: 5, y: 6 }, { x: 50, y: 60, negative: true }] }], 720, 960)).toBe(
-      '<0f>1<|box;x1=10;y1=20;x2=110;y2=220;w=720;h=960|>,2<|point;x=5;y=6;w=720;h=960|>-<|point;x=50;y=60;w=720;h=960|>'
+      '<0f>1<|box;x1=10;y1=20;x2=109;y2=219;w=720;h=960|>,2<|point;x=5;y=6;w=720;h=960|>-<|point;x=50;y=60;w=720;h=960|>'
     )
+    // за краем кадра — прижимаем, а не падаем
+    expect(objectPrompt([{ id: 3, box: { x1: -4, y1: 0, x2: 900, y2: 50 } }], 720, 960)).toBe('<0f>3<|box;x1=0;y1=0;x2=719;y2=49;w=720;h=960|>')
     expect(() => objectPrompt(Array.from({ length: 17 }, (_, i) => ({ id: i, box: { x1: 0, y1: 0, x2: 1, y2: 1 } })), 10, 10)).toThrow(/16/)
     expect(conceptPrompt('  t-shirt, ')).toBe('t-shirt')
   })
@@ -89,15 +92,35 @@ describe('SAM 3.1', () => {
     expect(JSON.stringify(samRequest('jeans', { videoFileId: 'file-1' }))).toContain('"input_video"')
   })
 
-  it('parses frames out of order, keyed and positional boxes, and keeps masks for the decoder', () => {
-    const text = ['<3f>1<|box;x1=5;y1=6;x2=50;y2=60;w=720;h=960|>', '<0f>1<|box;10;20;110;220;720;960;0.93|><|mask;x=0;y=0;0.9;data=24,32,~|!8Gg>Q|>,2<|box;30;40;90;100;720;960|>', 'noise'].join('\n')
-    const r = parseSam(text)
-    expect(r).toHaveLength(3)
-    expect(r[0]).toMatchObject({ frame: 3, id: 1, box: { x1: 5, y1: 6, x2: 50, y2: 60, w: 720, h: 960, c: null }, mask: null })
-    expect(r[1]).toMatchObject({ frame: 0, id: 1, box: { x1: 10, y2: 220, c: 0.93 } })
-    expect(r[1].mask).toContain('data=24,32')
-    expect(r[2]).toMatchObject({ frame: 0, id: 2, box: { x1: 30, y1: 40 } })
-    expect(parseSam('')).toEqual([])
+  // настоящий ответ SAM 3.1 из README @meta-sam/parser: кадр 0 клипа 320×334, подсказка «button», два объекта
+  const README_OUTPUT =
+    '<0f>0<|box;x1=211;y1=228;x2=270;y2=254;w=320;h=334|>' +
+    "<|mask;x=0;y=0;data=27,60,~!!!!M!0c[0o91w?q1!pIH4pPRVp2B3'7`e.ioeAf6-k/#Xd8%dX9x(|>" +
+    ',1<|box;x1=155;y1=228;x2=202;y2=254;w=320;h=334|>' +
+    '<|mask;x=0;y=0;data=27,48,~!!!!J!0c[q=Pj_zs=*4C4(/./x#:/`S_GnD`=o3?X{emCgO$y@|>\n'
+
+  it('parses a real SAM 3.1 answer with the official parser and puts masks into the frame', async () => {
+    const r = await parseSam(README_OUTPUT, 'video')
+    expect(r.warnings).toEqual([])
+    expect(r.objects.map((o) => [o.frame, o.id, o.box])).toEqual([
+      [0, 0, { x1: 211, y1: 228, x2: 271, y2: 255 }],
+      [0, 1, { x1: 155, y1: 228, x2: 203, y2: 255 }]
+    ])
+    const m = samMask(r.objects[0].mask!, 320, 334)
+    expect([m.width, m.height]).toEqual([320, 334])
+    let inside = 0
+    let outside = 0
+    for (let y = 0; y < 334; y++) for (let x = 0; x < 320; x++) {
+      const v = m.data[y * 320 + x]
+      expect(v === 0 || v === 1).toBe(true)
+      if (x >= 211 && x < 271 && y >= 228 && y < 255) inside += v
+      else outside += v
+    }
+    expect(inside).toBe(1539)
+    expect(outside).toBe(0)
+    // та же строка как картинка: кадр 0
+    expect((await parseSam(README_OUTPUT, 'image')).objects).toHaveLength(2)
+    expect((await parseSam('', 'image')).objects).toEqual([])
   })
 })
 
