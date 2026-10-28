@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.19.5",
+    "@meta-sam/parser": "0.1.0",
     "@twin/shared": "*",
     "hono": "^4.10.4",
     "sharp": "^0.34.4",
