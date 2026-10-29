@@ -12,7 +12,7 @@ export interface LimitConfig {
 
 export function limitsFromEnv(env: Record<string, string | undefined> = process.env): LimitConfig {
   const n = (v: string | undefined, d: number) => (v && Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d)
-  return { uploadsPerHour: n(env.LIMIT_UPLOADS_PER_HOUR, 30), jobsPerDay: n(env.LIMIT_JOBS_PER_DAY, 40), jobsPerDayTotal: n(env.LIMIT_JOBS_PER_DAY_TOTAL, 600) }
+  return { uploadsPerHour: n(env.LIMIT_UPLOADS_PER_HOUR, 80), jobsPerDay: n(env.LIMIT_JOBS_PER_DAY, 40), jobsPerDayTotal: n(env.LIMIT_JOBS_PER_DAY_TOTAL, 600) }
 }
 
 export type LimitKind = 'upload' | 'job'

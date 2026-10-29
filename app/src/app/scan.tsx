@@ -8,12 +8,15 @@ import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
+import { BodyScan } from '@/components/body-scan';
 import { Icon, type IconName } from '@/components/icons';
 import { JobNotice, JobSteps, ProgressBar } from '@/components/job-steps';
 import { useFrameWidth } from '@/components/layout';
+import { PieceScan } from '@/components/piece-scan';
 import { Cta, Glass, GlassButton, T } from '@/components/ui';
 import { CLOSET, ME } from '@/data/demo';
-import { fileUrl, startJob, uploadAsset, useJob } from '@/lib/api';
+import { fileUrl, startJob, uploadAsset, uploadBlob, useJob } from '@/lib/api';
+import { canLiveScan, type CapturedShot } from '@/lib/live-camera';
 import { isDesktopWeb } from '@/lib/platform';
 import { useStore } from '@/lib/store';
 import { useTheme } from '@/theme/theme';
@@ -21,12 +24,13 @@ import { PHOTO_GLASS } from '@/theme/tokens';
 
 // Скан шкафа и себя. Пути, чтобы пройти шаг и без камеры (судьи с ноутбука): снять видео, загрузить своё,
 // взять готовое видео с сервера, а на компьютере — снять телефоном по QR (ход скана виден здесь же).
+// В браузере с камерой — умный скан: себя (body-scan.tsx), вещи по одной и в магазине (piece-scan.tsx)
 
-type Mode = 'rail' | 'single' | 'body';
+type Mode = 'rail' | 'single' | 'body' | 'store';
 
 const RAIL = ['hoodie', 'tee', 'blackjeans', 'boots'].map((id) => CLOSET.find((i) => i.id === id)!);
 
-const COPY: Record<Mode, { title: string; hint: string; record: string; recordSub: string; upload: string; seconds: number }> = {
+const COPY: Record<Exclude<Mode, 'store'>, { title: string; hint: string; record: string; recordSub: string; upload: string; seconds: number }> = {
   rail: {
     title: 'Scan your closet',
     hint: 'Move slowly along the rail in one pass. Every piece is found, cut out and tagged for you.',
@@ -59,16 +63,16 @@ export default function ScanScreen() {
   const width = useFrameWidth();
   // job — скан, запущенный на подключённом телефоне: компьютер показывает его ход
   const params = useLocalSearchParams<{ mode?: string; job?: string }>();
-  const [mode, setMode] = useState<Mode>(params.mode === 'body' ? 'body' : 'rail');
+  const [mode, setMode] = useState<Mode>(params.mode === 'body' || params.mode === 'store' || params.mode === 'single' ? params.mode : 'rail');
   const [jobId, setJobId] = useState<string | null>(typeof params.job === 'string' && params.job ? params.job : null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { job, error: pollError } = useJob(jobId);
-  const { addGarments, addScan } = useStore();
+  const { addGarments, addScan, importShots } = useStore();
   const desktop = isDesktopWeb();
   const body = mode === 'body';
   const kind: 'body_scan' | 'closet_scan' = body ? 'body_scan' : 'closet_scan';
-  const copy = COPY[mode];
+  const copy = COPY[mode === 'store' ? 'single' : mode];
   const close = () => (router.canGoBack() ? router.back() : router.replace('/'));
 
   async function run(label: string, start: () => Promise<string | null>) {
@@ -103,13 +107,25 @@ export default function ScanScreen() {
 
   const fromSample = () => run('Starting', async () => (await startJob(kind, { sample: (body ? 'body' : 'closet') as SampleName })).id);
 
+  // 4 ракурса умного скана: каждый — отдельный снимок, подписанный ракурсом
+  const fromShots = (shots: CapturedShot[]) =>
+    run('Uploading your photos', async () => {
+      const uploads = await Promise.all(shots.map((s, i) => uploadBlob(s.blob, `${s.view}-${i}.jpg`)));
+      return (await startJob('body_scan', { shots: shots.map((s, i) => ({ uploadId: uploads[i].id, view: s.view })) })).id;
+    });
+
   const reset = () => {
     setJobId(null);
     setError(null);
   };
 
+  const live = canLiveScan() && !jobId;
+  if (live && body) return <BodyScan onDone={fromShots} onClose={close} onUpload={() => fromPicker(false)} onSample={fromSample} onPhone={desktop ? () => router.push({ pathname: '/connect', params: { to: 'scan', mode: 'body' } }) : undefined} busy={busy} error={error} />;
+  if (canLiveScan() && (mode === 'single' || mode === 'store')) return <PieceScan mode={mode === 'store' ? 'store' : 'closet'} onSave={(shots) => importShots(shots, mode === 'store' ? 'store' : 'closet')} onClose={() => router.replace(mode === 'store' ? '/try' : '/')} />;
+
   const frames = job?.result.keyframes ?? [];
-  const found = body ? (job?.result.body?.length ?? 0) : (job?.result.garments?.length ?? 0);
+  // у умного скана ракурсы уже сняты: 4 из 4 видно сразу, маски SAM придут с ключом
+  const found = body ? (job?.result.body?.length ?? job?.result.shots?.length ?? 0) : (job?.result.garments?.length ?? 0);
   const cols = 4;
   const cell = (width - 40 - (cols - 1) * 8) / cols;
 
@@ -120,7 +136,7 @@ export default function ScanScreen() {
       {frames.length ? (
         <View style={{ position: 'absolute', top: insets.top + 76, left: 20, right: 20, gap: 10 }}>
           <T size={11} w={600} upper color="#A8A29E">
-            {frames.length === 1 ? 'Your photo' : `${frames.length} key frames from your video`}
+            {job?.result.shots ? `Your ${frames.length} photos` : frames.length === 1 ? 'Your photo' : `${frames.length} key frames from your video`}
           </T>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {frames.map((f) => (
@@ -232,7 +248,7 @@ export default function ScanScreen() {
                   </T>
                 </View>
                 <T size={13} color={t.muted} style={{ marginBottom: 6 }} numberOfLines={1}>
-                  {job?.result.media?.duration ? `${Math.round(job.result.media.duration)} s video` : job?.result.media ? 'Photo' : ''}
+                  {job?.result.shots ? `${job.result.shots.length} photos` : job?.result.media?.duration ? `${Math.round(job.result.media.duration)} s video` : job?.result.media ? 'Photo' : ''}
                 </T>
               </View>
               <ProgressBar value={job?.percent ?? 0.02} />

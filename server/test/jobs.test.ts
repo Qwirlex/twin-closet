@@ -87,6 +87,57 @@ describe('jobs without the Meta key', () => {
     expect(job.errorCode).toBe('no_key')
   }, 30_000)
 
+  it('a guided body scan takes 4 labelled photos: angles are known, masks wait for the key', async () => {
+    const { app, store } = setup()
+    const ids = await Promise.all([1, 2, 3, 4].map(async () => (await upload(app, photo, 'image/png')).id))
+    // в любом порядке — на сервере встают по ракурсам
+    const shots = [
+      { uploadId: ids[0], view: 'back' },
+      { uploadId: ids[1], view: 'front' },
+      { uploadId: ids[2], view: 'side' },
+      { uploadId: ids[3], view: 'three_quarter' }
+    ]
+    const job = await finished(app, (await (await startJob(app, { kind: 'body_scan', shots })).json()).id)
+    expect(job.steps.map((s) => s.status)).toEqual(['done', 'done', 'done', 'failed'])
+    expect(job.errorCode).toBe('no_key')
+    expect(job.result.shots!.map((s) => s.view)).toEqual(['front', 'three_quarter', 'side', 'back'])
+    expect(job.result.keyframes).toEqual(job.result.shots!.map((s) => s.url))
+    for (const s of job.result.shots!) expect(existsSync(store.path(s.url.split('/').pop()!))).toBe(true)
+    expect(existsSync(store.path(`${job.id}.jpg`))).toBe(true)
+  }, 30_000)
+
+  it('a piece one by one: front, back and the label in one job', async () => {
+    const { app } = setup()
+    const ids = await Promise.all([1, 2, 3].map(async () => (await upload(app, photo, 'image/png')).id))
+    const shots = [
+      { uploadId: ids[0], view: 'label' },
+      { uploadId: ids[1], view: 'front' },
+      { uploadId: ids[2], view: 'back' }
+    ]
+    const job = await finished(app, (await (await startJob(app, { kind: 'import_item', shots })).json()).id)
+    expect(job.steps[0].status).toBe('done')
+    expect(job.errorCode).toBe('no_key')
+    expect(job.result.shots!.map((s) => s.view)).toEqual(['front', 'back', 'label'])
+    expect(job.result.media).toMatchObject({ kind: 'image', width: 800, height: 600 })
+  }, 30_000)
+
+  it('refuses a broken photo set with a clear reason', async () => {
+    const { app } = setup()
+    const p = await upload(app, photo, 'image/png')
+    const v = await upload(app, video, 'video/quicktime')
+    const err = async (kind: string, shots: unknown) => {
+      const res = await startJob(app, { kind, shots })
+      return { status: res.status, error: (await res.json()).error as string }
+    }
+    expect(await err('body_scan', [{ uploadId: p.id, view: 'side' }])).toMatchObject({ status: 400, error: expect.stringMatching(/front/) })
+    expect(await err('body_scan', [{ uploadId: p.id, view: 'front' }, { uploadId: p.id, view: 'front' }])).toMatchObject({ status: 400, error: expect.stringMatching(/once/) })
+    expect(await err('body_scan', [{ uploadId: p.id, view: 'label' }])).toMatchObject({ status: 400 })
+    expect(await err('closet_scan', [{ uploadId: p.id, view: 'front' }])).toMatchObject({ status: 400 })
+    expect(await err('import_item', [])).toMatchObject({ status: 400 })
+    expect(await err('import_item', [{ uploadId: 'nope', view: 'front' }])).toMatchObject({ status: 404, error: expect.stringMatching(/not found/) })
+    expect(await err('import_item', [{ uploadId: v.id, view: 'front' }])).toMatchObject({ status: 404, error: expect.stringMatching(/photo, not a video/) })
+  }, 30_000)
+
   it('says what to do with the wrong kind of file', async () => {
     const { app } = setup()
     const u = await upload(app, photo, 'image/png')

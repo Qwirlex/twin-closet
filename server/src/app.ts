@@ -1,5 +1,5 @@
 // HTTP API: загрузки, задачи, файлы. Отдельно от запуска сервера — чтобы гонять в тестах через app.request
-import { JOB_KINDS, MAX_DEVICE_STATE, SAMPLES, type JobInput, type JobKind, type LookupQuery, type SampleName, type Upload } from '@twin/shared'
+import { checkShots, JOB_KINDS, MAX_DEVICE_STATE, SAMPLES, type JobInput, type JobKind, type LookupQuery, type SampleName, type Shot, type Upload } from '@twin/shared'
 import { getConnInfo } from '@hono/node-server/conninfo'
 import { Hono, type Context } from 'hono'
 import { cors } from 'hono/cors'
@@ -91,11 +91,15 @@ export function createApp({ store, jobs, meta, watch, limits = new Limits(limits
   })
 
   app.post('/jobs', async (c) => {
-    const body = (await c.req.json().catch(() => null)) as { kind?: string; uploadId?: string; sample?: string; lookup?: LookupQuery } | null
+    const body = (await c.req.json().catch(() => null)) as { kind?: string; uploadId?: string; sample?: string; lookup?: LookupQuery; shots?: unknown } | null
     if (!body || !JOB_KINDS.includes(body.kind as JobKind)) return c.json({ error: `kind: ${JOB_KINDS.join(' | ')}` }, 400)
     let input: JobInput
     if (body.lookup && typeof body.lookup.storeId === 'string') input = { lookup: { storeId: body.lookup.storeId, ref: body.lookup.ref, query: body.lookup.query, country: String(body.lookup.country ?? 'IE') } }
-    else if (body.uploadId) input = { uploadId: body.uploadId }
+    else if (body.shots !== undefined) {
+      const bad = checkShots(body.kind as JobKind, body.shots)
+      if (bad) return c.json({ error: bad }, 400)
+      input = { shots: (body.shots as Shot[]).map((s) => ({ uploadId: s.uploadId, view: s.view })) }
+    } else if (body.uploadId) input = { uploadId: body.uploadId }
     else if (SAMPLES.includes(body.sample as SampleName)) input = { sample: body.sample as SampleName }
     else return c.json({ error: 'Send uploadId or sample.' }, 400)
     const over = limited(c, 'job')

@@ -2,7 +2,7 @@
 // Всё, что не требует моделей (видео → MP4, ключевые кадры), работает уже сейчас; шаги моделей ждут ключ Meta.
 import { copyFileSync, existsSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
-import { LIVE_STORE_DOMAINS, LIVE_STORE_IDS, type Job, type JobErrorCode, type JobInput, type JobKind, type JobResult, type JobStep, type MediaInfo, type SampleName } from '@twin/shared'
+import { LIVE_STORE_DOMAINS, LIVE_STORE_IDS, SHOT_RULES, type Job, type JobErrorCode, type JobInput, type JobKind, type JobResult, type JobStep, type MediaInfo, type SampleName, type ShotView } from '@twin/shared'
 import { keyframes, normalizeImage, normalizeVideo, probe } from './media'
 import { findProduct, runTask, storeLinks, text, type FoundProducts } from './models/spark'
 import type { MetaApi } from './meta'
@@ -52,6 +52,18 @@ const STEPS: Record<JobKind, StepDef[]> = {
   ]
 }
 
+/** Шаги задачи; у умного скана снимки и ракурсы уже выбраны на телефоне — подписи об этом */
+function stepsFor(kind: JobKind, input: JobInput): StepDef[] {
+  if (!('shots' in input)) return STEPS[kind]
+  const n = input.shots.length
+  const label: Record<string, string> = {
+    prepare: `Preparing your ${n === 1 ? 'photo' : `${n} photos`}`,
+    keyframes: 'Sharp, steady photos picked on your phone',
+    angles: 'Angles marked while you turned'
+  }
+  return STEPS[kind].map((s) => (label[s.key] ? { ...s, label: label[s.key] } : s))
+}
+
 /** Сколько ключевых кадров видит Muse Spark */
 const KEYFRAMES: Partial<Record<JobKind, number>> = { closet_scan: 8, body_scan: 12 }
 
@@ -73,6 +85,8 @@ interface Source {
   sample: SampleName | null
   /** файл загрузки в хранилище: после перезапуска его докачивают из Supabase */
   upload?: string
+  /** снимки умного скана, по порядку ракурсов; главный — первый */
+  shots?: { path: string; upload: string; view: ShotView }[]
 }
 
 export class Jobs {
@@ -85,7 +99,7 @@ export class Jobs {
 
   /** Создаёт задачу и запускает её в фоне; ошибки входа (нет файла, нет готового видео) — сразу исключением */
   start(kind: JobKind, input: JobInput): Job {
-    const source = this.source(input)
+    const source = this.source(input, kind)
     const now = new Date().toISOString()
     const job = this.store.addJob({
       id: this.store.id(),
@@ -93,7 +107,7 @@ export class Jobs {
       status: 'queued',
       progress: 'Waiting to start',
       percent: 0,
-      steps: STEPS[kind].map((s) => ({ ...s, status: 'pending' })),
+      steps: stepsFor(kind, input).map((s) => ({ ...s, status: 'pending' })),
       error: null,
       errorCode: null,
       result: {},
@@ -119,11 +133,23 @@ export class Jobs {
     }
   }
 
-  private source(input: JobInput): Source {
+  private source(input: JobInput, kind: JobKind): Source {
     if ('lookup' in input) {
       if (!(LIVE_STORE_IDS as readonly string[]).includes(input.lookup.storeId)) throw new JobError('bad_input', 'Searching this store is coming soon.')
       if (!input.lookup.ref?.trim() && !input.lookup.query?.trim()) throw new JobError('bad_input', 'Send the REF from the tag or a short description.')
       return { path: null, sample: null }
+    }
+    if ('shots' in input) {
+      // по порядку ракурсов: перед, ¾, бок, спина — главный снимок первым
+      const order = SHOT_RULES[kind]?.views ?? []
+      const sorted = [...input.shots].sort((a, b) => order.indexOf(a.view) - order.indexOf(b.view))
+      const shots = sorted.map((shot) => {
+        const u = this.store.upload(shot.uploadId)
+        if (!u) throw new JobError('bad_input', 'A photo was not found. Take it again.')
+        if (u.kind !== 'image') throw new JobError('bad_input', 'Each view is a photo, not a video.')
+        return { path: this.store.path(basename(u.url)), upload: basename(u.url), view: shot.view }
+      })
+      return { path: shots[0].path, sample: null, shots }
     }
     if ('uploadId' in input) {
       const u = this.store.upload(input.uploadId)
@@ -143,7 +169,7 @@ export class Jobs {
   }
 
   private async run(id: string, kind: JobKind, source: Source, input: JobInput): Promise<void> {
-    const steps = STEPS[kind]
+    const steps = stepsFor(kind, input)
     const statuses = new Map(steps.map((s) => [s.key, 'pending' as JobStep['status']]))
     const result: JobResult = {}
     const sync = (patch: Partial<Job> = {}) => {
@@ -168,9 +194,22 @@ export class Jobs {
 
     try {
       if (source.upload && !(await this.store.ensure(source.upload))) throw new JobError('bad_input', 'The file is no longer on the server. Add it again.')
-      const media = source.path ? await step('prepare', () => this.prepare(id, kind, source.path!)) : null
+      for (const shot of source.shots ?? []) if (!(await this.store.ensure(shot.upload))) throw new JobError('bad_input', 'A photo is no longer on the server. Take it again.')
+      const media = source.shots
+        ? await step('prepare', () => this.prepareShots(id, kind, source.shots!, result))
+        : source.path
+          ? await step('prepare', () => this.prepare(id, kind, source.path!))
+          : null
       if (media) result.media = media
-      if (!media) {
+      if (source.shots) {
+        // снимки уже выбраны на телефоне (поза, резкость, свет) — их и видят модели
+        if (KEYFRAMES[kind]) {
+          statuses.set('keyframes', 'done')
+          result.keyframes = result.shots!.map((s) => s.url)
+        }
+        // ракурсы подписаны при съёмке — выбирать их моделью не нужно
+        if (kind === 'body_scan') statuses.set('angles', 'done')
+      } else if (!media) {
         // поиск вещи в магазине: файла нет, сразу шаги моделей
       } else if (KEYFRAMES[kind] && media.kind === 'video' && media.duration) {
         const frames = await step('keyframes', () => keyframes(this.store.path(`${id}.mp4`), media.duration!, KEYFRAMES[kind]!, (i) => this.store.path(`${id}-k${i}.jpg`)))
@@ -181,7 +220,7 @@ export class Jobs {
         result.keyframes = [`/files/${id}.jpg`]
       }
       const ctx: StepContext = { input, result, scratch: {} }
-      for (const s of steps.filter((d) => d.model)) await step(s.key, () => this.modelStep(kind, s.key, ctx))
+      for (const s of steps.filter((d) => d.model && statuses.get(d.key) !== 'done')) await step(s.key, () => this.modelStep(kind, s.key, ctx))
       sync({ status: 'done', progress: 'Done', percent: 1 })
     } catch (e) {
       const err = e instanceof JobError ? e : new JobError('internal', e instanceof Error ? e.message : String(e))
@@ -211,6 +250,20 @@ export class Jobs {
       return info
     }
     return normalizeImage(path, out)
+  }
+
+  /** Снимки умного скана → JPEG до 1280 px; главный (первый) — ещё и `${id}.jpg`, как у одиночного фото */
+  private async prepareShots(id: string, kind: JobKind, shots: NonNullable<Source['shots']>, result: JobResult): Promise<MediaInfo> {
+    const infos: MediaInfo[] = []
+    result.shots = []
+    for (const [i, shot] of shots.entries()) {
+      const info = await this.prepare(`${id}-s${i}`, kind, shot.path)
+      if (info.kind !== 'image') throw new JobError('bad_input', 'Each view is a photo, not a video.')
+      infos.push(info)
+      result.shots.push({ view: shot.view, url: `/files/${id}-s${i}.jpg` })
+    }
+    copyFileSync(this.store.path(`${id}-s0.jpg`), this.store.path(`${id}.jpg`))
+    return infos[0]
   }
 
   private needMeta(model: string): void {

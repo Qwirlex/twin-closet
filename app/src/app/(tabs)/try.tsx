@@ -8,6 +8,7 @@ import { Icon, type IconName } from '@/components/icons';
 import { TabScreen } from '@/components/layout';
 import { Cta, Glass, Label, T, ThemeToggle } from '@/components/ui';
 import type { Item } from '@/data/demo';
+import { canLiveScan } from '@/lib/live-camera';
 import { isDesktopWeb } from '@/lib/platform';
 import { useShopping } from '@/lib/shopping';
 import { linkPiece, useStore } from '@/lib/store';
@@ -62,6 +63,11 @@ export default function TryScreen() {
       return;
     }
     if (via === 'Scanned in store') {
+      // умный скан: бирка → перед → спина, с подсказками; в сборке без живой камеры — обычное фото
+      if (canLiveScan()) {
+        router.push({ pathname: '/scan', params: { mode: 'store' } });
+        return;
+      }
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) {
         setError('Camera access is off. Turn it on in Settings to scan a piece in the store.');

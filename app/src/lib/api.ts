@@ -1,4 +1,4 @@
-import type { DeviceState, Job, JobKind, LookupQuery, PricePoint, SampleName, StoreSale, Upload, WatchItem } from '@twin/shared';
+import type { DeviceState, Job, JobKind, LookupQuery, PricePoint, SampleName, Shot, StoreSale, Upload, WatchItem } from '@twin/shared';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
@@ -50,7 +50,14 @@ export async function uploadAsset(asset: ImagePickerAsset): Promise<Upload> {
   return call('/uploads', { method: 'POST', body: form });
 }
 
-export function startJob(kind: JobKind, input: { uploadId: string } | { sample: SampleName } | { lookup: LookupQuery }): Promise<Job> {
+/** Снимок умного скана (JPEG из браузера) → сервер */
+export async function uploadBlob(blob: Blob, name: string): Promise<Upload> {
+  const form = new FormData();
+  form.append('file', new File([blob], name, { type: blob.type || 'image/jpeg' }));
+  return call('/uploads', { method: 'POST', body: form });
+}
+
+export function startJob(kind: JobKind, input: { uploadId: string } | { sample: SampleName } | { lookup: LookupQuery } | { shots: Shot[] }): Promise<Job> {
   return call('/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind, ...input }) });
 }
 

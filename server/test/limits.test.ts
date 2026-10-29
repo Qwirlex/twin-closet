@@ -29,8 +29,8 @@ describe('demo limits', () => {
   })
 
   it('reads limits from the environment with safe defaults', () => {
-    expect(limitsFromEnv({})).toEqual({ uploadsPerHour: 30, jobsPerDay: 40, jobsPerDayTotal: 600 })
-    expect(limitsFromEnv({ LIMIT_JOBS_PER_DAY: '5', LIMIT_UPLOADS_PER_HOUR: 'x' })).toMatchObject({ jobsPerDay: 5, uploadsPerHour: 30 })
+    expect(limitsFromEnv({})).toEqual({ uploadsPerHour: 80, jobsPerDay: 40, jobsPerDayTotal: 600 })
+    expect(limitsFromEnv({ LIMIT_JOBS_PER_DAY: '5', LIMIT_UPLOADS_PER_HOUR: 'x' })).toMatchObject({ jobsPerDay: 5, uploadsPerHour: 80 })
   })
 
   it('the API answers 429 over the limit; a cached sample is free', async () => {

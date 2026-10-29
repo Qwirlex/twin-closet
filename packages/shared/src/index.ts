@@ -85,7 +85,38 @@ export interface Job {
 }
 
 /** Откуда взять видео или фото для задачи; поиск вещи в магазине — без файла */
-export type JobInput = { uploadId: string } | { sample: SampleName } | { lookup: LookupQuery }
+export type JobInput = { uploadId: string } | { sample: SampleName } | { lookup: LookupQuery } | { shots: Shot[] }
+
+/**
+ * Снимки умного скана: каждый уже снят в нужный момент (поза, резкость, свет) и подписан.
+ * Скан себя — 4 ракурса; вещь по одной — перед, спина, ярлык; в магазине — бирка и сама вещь
+ */
+export const SHOT_VIEWS = ['front', 'three_quarter', 'side', 'back', 'label', 'tag'] as const
+export type ShotView = (typeof SHOT_VIEWS)[number]
+
+export interface Shot {
+  uploadId: string
+  view: ShotView
+}
+
+/** Какие снимки принимает каждая задача; первый в списке — главный */
+export const SHOT_RULES: Partial<Record<JobKind, { views: readonly ShotView[]; need: readonly ShotView[] }>> = {
+  body_scan: { views: ['front', 'three_quarter', 'side', 'back'], need: ['front'] },
+  import_item: { views: ['front', 'back', 'label', 'tag'], need: ['front'] }
+}
+
+/** Ошибка во входе снимков — текст для человека; null — всё в порядке */
+export function checkShots(kind: JobKind, shots: unknown): string | null {
+  const rule = SHOT_RULES[kind]
+  if (!rule) return 'Photo sets work for a body scan and a single piece.'
+  if (!Array.isArray(shots) || !shots.length || shots.length > rule.views.length) return `Send 1 to ${rule.views.length} photos.`
+  const views = shots.map((s) => (s && typeof s === 'object' ? (s as Shot).view : null))
+  if (shots.some((s) => !s || typeof (s as Shot).uploadId !== 'string')) return 'Every photo needs its upload id.'
+  if (views.some((v) => !rule.views.includes(v as ShotView))) return `Photos can be: ${rule.views.join(', ')}.`
+  if (new Set(views).size !== views.length) return 'Each view only once.'
+  const missing = rule.need.filter((v) => !views.includes(v))
+  return missing.length ? `Add the ${missing.join(' and ')} photo.` : null
+}
 
 /** Найти вещь онлайн в магазине: по артикулу с бирки или по описанию */
 export interface LookupQuery {
@@ -118,6 +149,8 @@ export interface JobResult {
   similar?: SimilarOwned[]
   /** что нашёл веб-поиск Muse Spark */
   products?: ProductHit[]
+  /** снимки умного скана после подготовки, в порядке ракурсов */
+  shots?: { view: ShotView; url: string }[]
 }
 
 export interface Upload {
@@ -225,3 +258,4 @@ export const MAX_DEVICE_STATE = 256 * 1024
 
 export * from './fit'
 export * from './style'
+export * from './scan'

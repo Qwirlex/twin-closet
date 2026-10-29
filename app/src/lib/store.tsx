@@ -4,7 +4,8 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 
 import { CLOSET, DEMO_BODY, LOOKS, OWN_LOOKS, SHOP, type DemoLook, type Item } from '@/data/demo';
 import { STORES } from '@/data/stores';
-import { fileUrl, getJob, startJob, uploadAsset } from '@/lib/api';
+import { fileUrl, getJob, startJob, uploadAsset, uploadBlob } from '@/lib/api';
+import type { CapturedShot } from '@/lib/live-camera';
 import { readSetting, writeSetting } from '@/lib/storage';
 import { useSyncedDoc } from '@/lib/sync';
 
@@ -40,6 +41,8 @@ interface Store {
   addToTryOn: (item: Item) => void;
   /** скриншот или фото из магазина → сервер разбирает вещь, карточка обновляется по ходу */
   importAsset: (asset: ImagePickerAsset, via: NonNullable<Item['via']>) => void;
+  /** вещь из умного скана: перед, спина, ярлык (дома — в шкаф) или бирка и вещь (в магазине — в примерку); ждёт загрузку */
+  importShots: (shots: CapturedShot[], to: 'closet' | 'store') => Promise<void>;
   /** вещи из скана шкафа */
   addGarments: (garments: Garment[]) => void;
   addScan: (jobId: string, kind: ScanRef['kind']) => void;
@@ -149,10 +152,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   /** задачи, за которыми уже следим (своими загрузками или после перезапуска) */
   const following = useRef(new Set<string>());
 
-  const patchAdded = (id: string, p: Partial<Item>) => change((d) => ({ ...d, tryOnAdded: d.tryOnAdded.map((i) => (i.id === id ? { ...i, ...p } : i)) }));
+  type AddedList = 'tryOnAdded' | 'closetAdded';
+  const patchIn = (list: AddedList, id: string, p: Partial<Item>) => change((d) => ({ ...d, [list]: d[list].map((i) => (i.id === id ? { ...i, ...p } : i)) }));
 
   /** Следим за разбором вещи, пока задача не закончится (на любом устройстве с этим шкафом) */
-  async function follow(id: string, jobId: string, via: Item['via']) {
+  async function follow(id: string, jobId: string, via: Item['via'], list: AddedList = 'tryOnAdded') {
+    const patchAdded = (itemId: string, p: Partial<Item>) => patchIn(list, itemId, p);
     if (following.current.has(jobId)) return;
     following.current.add(jobId);
     try {
@@ -160,7 +165,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const j = await getJob(jobId);
         if (j.status === 'done' && j.result.item) {
           const ready = garmentToItem(j.result.item, via);
-          change((d) => ({ ...d, tryOnAdded: d.tryOnAdded.map((i) => (i.id === id ? ready : i)) }));
+          change((d) => ({ ...d, [list]: d[list].map((i) => (i.id === id ? ready : i)) }));
           return;
         }
         if (j.status === 'failed') {
@@ -180,8 +185,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // после перезапуска или с подключённого телефона: доводим вещи, которые ещё разбираются
   useEffect(() => {
     for (const i of doc.data.tryOnAdded) if (i.stage === 'working' && i.jobId) void follow(i.id, i.jobId, i.via);
+    for (const i of doc.data.closetAdded) if (i.stage === 'working' && i.jobId) void follow(i.id, i.jobId, i.via, 'closetAdded');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc.data.tryOnAdded]);
+  }, [doc.data.tryOnAdded, doc.data.closetAdded]);
 
   useEffect(() => writeSetting(KNOWN_SCANS, JSON.stringify(knownScans.slice(-30))), [knownScans]);
 
@@ -208,6 +214,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    async function importShots(shots: CapturedShot[], to: 'closet' | 'store') {
+      const uploads = await Promise.all(shots.map((s, i) => uploadBlob(s.blob, `${s.view}-${i}.jpg`)));
+      const job = await startJob('import_item', { shots: shots.map((s, i) => ({ uploadId: uploads[i].id, view: s.view })) });
+      const main = uploads[Math.max(0, shots.findIndex((s) => s.view === 'front'))];
+      const via = to === 'store' ? 'Scanned in store' : undefined;
+      const item: Item = { id: `new-${Date.now()}`, name: to === 'store' ? 'New in-store piece' : 'New piece', meta: job.progress, kind: null, image: { uri: fileUrl(main.url) }, via, pending: true, stage: 'working', jobId: job.id, ...(to === 'store' ? { shop: { price: null, url: null } } : { isNew: true }) };
+      const list: AddedList = to === 'store' ? 'tryOnAdded' : 'closetAdded';
+      change((d) => ({ ...d, [list]: list === 'closetAdded' ? [item, ...d.closetAdded] : [...d.tryOnAdded, item] }));
+      void follow(item.id, job.id, via, list);
+    }
+
     return {
       closet,
       tryOn,
@@ -230,6 +247,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             : { ...d, tryOnAdded: [...d.tryOnAdded.filter((i) => i.id !== it.id), it] }
         ),
       importAsset: (asset, via) => void importAsset(asset, via),
+      importShots,
       addGarments: (gs) =>
         change((d) => ({ ...d, closetAdded: [...gs.map((g) => ({ ...garmentToItem(g), isNew: true })), ...d.closetAdded.filter((i) => !gs.some((g) => g.id === i.id))] })),
       addScan: (jobId, kind) => {

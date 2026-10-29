@@ -40,6 +40,8 @@ export const ICONS = {
   globe: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z M3 12h18 M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z',
   tag: 'M3 12V4h8l10 10-8 8z M7.5 7.5h.01',
   ruler: 'M3 9h18v6H3z M7 9v3 M11 9v2 M15 9v3 M19 9v2',
+  sound: 'M4 10v4h4l5 4V6L8 10H4z M16.5 8.5a5 5 0 0 1 0 7 M19 6a8.5 8.5 0 0 1 0 12',
+  mute: 'M4 10v4h4l5 4V6L8 10H4z M17 9.5l5 5 M22 9.5l-5 5',
   chevronDown: 'M6 9l6 6 6-6',
   open: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
 } as const;
