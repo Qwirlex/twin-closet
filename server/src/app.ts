@@ -10,6 +10,7 @@ import { JobError, type Jobs } from './jobs'
 import type { MetaApi } from './meta'
 import { BadForm, saveFileField, UploadTooLarge } from './multipart'
 import { MIME, type Store } from './store'
+import { trendCountry, Trends } from './trends'
 import { Limits, limitsFromEnv, type LimitKind } from './limits'
 import type { PriceWatch, WatchInput } from './watch'
 
@@ -46,7 +47,7 @@ function clientIp(c: Context): string {
   }
 }
 
-export function createApp({ store, jobs, meta, watch, limits = new Limits(limitsFromEnv()), log = console.log }: { store: Store; jobs: Jobs; meta: MetaApi; watch: PriceWatch; limits?: Limits; log?: (m: string) => void }): Hono {
+export function createApp({ store, jobs, meta, watch, limits = new Limits(limitsFromEnv()), log = console.log, trends = new Trends(store, meta.configured ? Trends.spark(meta) : null, log) }: { store: Store; jobs: Jobs; meta: MetaApi; watch: PriceWatch; limits?: Limits; log?: (m: string) => void; trends?: Trends }): Hono {
   const app = new Hono()
   app.use('*', cors())
 
@@ -58,6 +59,9 @@ export function createApp({ store, jobs, meta, watch, limits = new Limits(limits
   // корень API открывают из любопытства (судьи, ссылка из README) — отвечаем, что это и где проверка
   app.get('/', (c) => c.json({ name: 'Twin Closet API', health: '/health', app: 'https://twin-closet.vercel.app' }))
   app.get('/health', (c) => c.json({ ok: true, meta: meta.configured, storage: store.kind }))
+
+  // тренды сезона по стране: с ключом — свежая выжимка Muse Spark раз в неделю, без ключа — curated
+  app.get('/trends', (c) => c.json(trends.get(trendCountry(c.req.query('country')))))
 
   app.post('/uploads', async (c) => {
     const over = limited(c, 'upload')

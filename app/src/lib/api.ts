@@ -1,4 +1,4 @@
-import type { DeviceState, Job, JobKind, LookupQuery, PricePoint, SampleName, Shot, StoreSale, Upload, WatchItem } from '@twin/shared';
+import type { DeviceState, Job, JobKind, LookupQuery, PricePoint, SampleName, Shot, StoreSale, TrendDigest, Upload, WatchItem } from '@twin/shared';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
@@ -115,6 +115,11 @@ export function getWatch(): Promise<WatchState> {
 
 export async function getPriceHistory(id: string): Promise<PricePoint[]> {
   return (await call<{ points: PricePoint[] }>(`/watch/${encodeURIComponent(id)}/history`)).points;
+}
+
+/** Тренды сезона для страны: с ключом — свежая выжимка Muse Spark за неделю, без ключа — curated */
+export function getTrends(country: string): Promise<TrendDigest> {
+  return call(`/trends?country=${encodeURIComponent(country)}`);
 }
 
 /** Раздел устройства на сервере (шкаф, вишлист): общий для компьютера и телефона, подключённого по QR */

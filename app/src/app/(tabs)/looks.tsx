@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { TabScreen, useFrameWidth } from '@/components/layout';
+import { Trending } from '@/components/trending';
 import { PhotoChip, T, Tag, ThemeToggle } from '@/components/ui';
 import { LOOKS, OWN_LOOKS, type DemoLook } from '@/data/demo';
 import { useStore } from '@/lib/store';
@@ -13,7 +14,7 @@ import { PHOTO_BG } from '@/theme/tokens';
 export default function LooksScreen() {
   const { t } = useTheme();
   const { savedIds, item } = useStore();
-  const [tab, setTab] = useState<'saved' | 'ideas'>('saved');
+  const [tab, setTab] = useState<'saved' | 'ideas' | 'trends'>('saved');
   const tileW = (useFrameWidth() - 40 - 12) / 2;
   const saved = LOOKS.filter((l) => savedIds.includes(l.id));
   const looks = tab === 'saved' ? saved : OWN_LOOKS;
@@ -35,6 +36,7 @@ export default function LooksScreen() {
           [
             ['saved', `Saved · ${saved.length}`],
             ['ideas', 'Ideas from your closet'],
+            ['trends', 'Trending'],
           ] as const
         ).map(([key, label]) => {
           const on = tab === key;
@@ -48,7 +50,9 @@ export default function LooksScreen() {
         })}
       </View>
 
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: 12, rowGap: 14 }}>
+      {tab === 'trends' ? <Trending /> : null}
+
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: 12, rowGap: 14, display: tab === 'trends' ? 'none' : 'flex' }}>
         {looks.map((l) => {
           const n = newCount(l);
           const angles = Object.keys(l.renders).length;

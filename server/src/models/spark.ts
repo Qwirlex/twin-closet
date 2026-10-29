@@ -1,6 +1,6 @@
 // Muse Spark: все шаги, где модель смотрит и решает. Каждый шаг — промпт + JSON-схема (ответ по схеме гарантирован API).
 // Схемы строгие: все поля обязательны, лишних нет, «нет значения» — null (так требует strict json_schema).
-import { GARMENT_KINDS, type GarmentKind } from '@twin/shared'
+import { cleanDigest, GARMENT_KINDS, liveDetail, STYLE_IDS, stylePrompt, TREND_KINDS, trendPrompt, type GarmentKind, type OutfitPiece, type StyleProfile, type TrendDigest } from '@twin/shared'
 import sharp from 'sharp'
 import { citations, MODELS, outputText, type MetaApi, type ResponsesOutput } from '../meta'
 
@@ -212,9 +212,49 @@ You are a calm, practical stylist. You get new pieces the person is considering 
 sometimes an occasion, and their style (styles with weights, colours, styles to leave out). Build exactly 3 outfits.
 Every outfit uses at least one new piece and pieces from the closet, one item per body zone (top, bottom or dress,
 optional outerwear, shoes). Only ids from the lists. Keep outfits in their style; never pair pieces from styles that
-clash (pressed wool trousers with a hoodie) unless they ask.
+clash (pressed wool trousers with a hoodie) unless they ask. No plain basics: every outfit has one live detail —
+a trend from the brief, layers, a colour accent or a texture. Use a trend only when it suits their style.
 "title": 1–2 words (e.g. "Weekend", "Friday dinner"). "note": one sentence why it works, plain and specific.`,
   schema: obj({ looks: arr(obj({ title: str, item_ids: arr(str), note: str })) })
+}
+
+/** Что уходит в buildLooks вместе с вещами: стиль человека и тренды под него */
+export function looksBrief(profile: StyleProfile | null, digest: TrendDigest, who: 'men' | 'women' | 'all' = 'all'): string {
+  return [stylePrompt(profile), trendPrompt(digest, profile, who)].join('\n\n')
+}
+
+/** Образы от модели с пометкой «скучная база» (нет живой детали) — такие показываем последними */
+export function markPlain(looks: Looks['looks'], pieces: Record<string, OutfitPiece>, digest: TrendDigest): (Looks['looks'][number] & { detail: string | null; plain: boolean })[] {
+  const marked = looks.map((l) => {
+    const detail = liveDetail(l.item_ids.map((id) => pieces[id]).filter((p): p is OutfitPiece => !!p), digest)
+    return { ...l, detail, plain: detail === null }
+  })
+  return [...marked.filter((l) => !l.plain), ...marked.filter((l) => l.plain)]
+}
+
+// ── Тренды сезона (веб-поиск Muse Spark, раз в неделю на страну) ──────────────────
+
+export const trendDigest: Task<TrendDigest> = {
+  name: 'trend_digest',
+  effort: 'medium',
+  system: `${BASE_RULES}
+You are a fashion editor. Search today's web for what people in the person's country are wearing this season:
+silhouettes, colours, pieces, patterns, textures and ways of styling. Give 10 to 14 trends that real people can wear,
+from the most wearable to the boldest. Write every line in your own words; never copy sentences from the pages.
+"line": how to wear it, one sentence. "styles": ids from this list only: ${STYLE_IDS.join(', ')}.
+"keywords": 2–6 lowercase words that would appear in a clothing item's name or fabric (e.g. "bomber", "corduroy").
+"who": "men", "women" or "all". "sources": the pages you used.`,
+  schema: obj({
+    season: str,
+    region: str,
+    trends: arr(obj({ id: str, name: str, kind: { type: 'string', enum: [...TREND_KINDS] }, line: str, styles: arr(str), keywords: arr(str), who: { type: 'string', enum: ['men', 'women', 'all'] } })),
+    sources: arr(obj({ name: str, url: str }))
+  }),
+  parse: (raw) => {
+    const d = cleanDigest(raw)
+    if (!d) throw new Error('Muse Spark returned no usable trends')
+    return d
+  }
 }
 
 // ── Проверка примерки ───────────────────────────────────────────────────────

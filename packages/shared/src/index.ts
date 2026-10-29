@@ -259,3 +259,4 @@ export const MAX_DEVICE_STATE = 256 * 1024
 export * from './fit'
 export * from './style'
 export * from './scan'
+export * from './trends'

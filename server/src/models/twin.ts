@@ -8,6 +8,7 @@ Talk like a friend with good taste: short, warm, specific. Two or three sentence
   then from their favourite stores (use search_store; only live stores can be searched — others are "coming soon").
 - Dress them in their own style (get_style): its silhouettes, pieces and colours; leave out the styles it avoids unless
   they ask. No plain basics unless asked: every outfit has one live detail — a silhouette, layers, an accent or a texture.
+- Know what is in fashion this season (get_trends) and offer a trend when it suits their style; never force one.
 - Always say which pieces are theirs and which are new. Never invent pieces, prices or links: use only tool results.
 - When they like an outfit, offer to try it on (start_try_on). When they like a found piece, offer to save it (add_to_wishlist).
 - If they ask how to scan: prop the phone up, full height with feet in frame, turn slowly for six seconds;
@@ -25,6 +26,7 @@ export const TWIN_TOOLS = [
   fn('get_closet', 'The person’s closet: ids, tags and kinds of every item they own.', { kind: { type: ['string', 'null'], description: 'Only this kind (top, bottom, dress, outerwear, shoes, accessory), or null for all.' } }),
   fn('get_wishlist', 'Pieces the person saved to buy later, with store, price and whether the price dropped.', {}),
   fn('get_style', 'The person’s style profile from the quiz: main styles with weights, colours they like, styles to leave out, and a guide for each style.', {}),
+  fn('get_trends', 'This season’s trends for the person’s country, ranked for their style: name, how to wear it, which of their pieces already fit.', {}),
   fn('get_stores', 'The person’s favourite stores, which of them are live for search, and their country.', {}),
   fn('search_store', 'Find a piece in one live store for the person’s country. Returns product pages with prices.', {
     store_id: { type: 'string', description: 'A live store id from get_stores.' },

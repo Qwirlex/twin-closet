@@ -14,6 +14,7 @@ import { Cta, Glass, GlassButton, GoldRim, Label, PhotoChip, T } from '@/compone
 import { ANGLES, LOOKS, ME, OWN_LOOKS, type Item } from '@/data/demo';
 import { money, useShopping } from '@/lib/shopping';
 import { useStore } from '@/lib/store';
+import { trendsIn, useTrends } from '@/lib/trends';
 import { useTheme } from '@/theme/theme';
 import { PHOTO_GLASS } from '@/theme/tokens';
 
@@ -33,6 +34,7 @@ export default function ResultScreen() {
   const { wishlist, watch } = useShopping();
 
   const look = looks[index] ?? LOOKS[0];
+  const trends = useTrends();
   const angleKey = ANGLES[angle].key;
   const after = look.renders[angleKey] ?? null;
   const pieces = look.itemIds.map((id) => item(id)).filter((i): i is Item => !!i);
@@ -41,6 +43,8 @@ export default function ResultScreen() {
   const saved = savedIds.includes(look.id);
   // стили образа, которые есть в профиле человека (и ни одного из «избегаю»)
   const inStyle = styleMatch(look.styles, style) > 0 ? look.styles.filter((id) => style?.styles.some((s) => s.id === id)) : [];
+  // тренды сезона в вещах образа (Looks → Trending)
+  const onTrend = trendsIn(pieces, trends);
   // посадка новых вещей образа: только у тех, где есть замеры; первой — вещь с оговоркой
   const fits: FitPiece[] = fresh
     .flatMap((p) => {
@@ -142,6 +146,11 @@ export default function ResultScreen() {
           <T size={13} color={t.muted} lh={1.4}>
             {look.note}
           </T>
+          {onTrend.length ? (
+            <T size={13} color={t.text} lh={1.4} style={{ marginTop: 4 }}>
+              {`On trend · ${onTrend.map((tr) => tr.name).join(', ')}`}
+            </T>
+          ) : null}
           {style ? (
             <T size={13} color={inStyle.length ? t.accent : t.muted} lh={1.4} style={{ marginTop: 4 }}>
               {inStyle.length ? `In your style · ${inStyle.map((id) => STYLES[id].name).join(', ')}` : `Outside your style · ${styleLine(style)}`}

@@ -24,7 +24,7 @@ the models are live right now.
 4. **Scan → Scan with your phone**: a QR code opens the same closet on your phone (any phone, in the browser,
    nothing to install). Film your rail or a slow spin there — the steps run on your laptop screen, each labelled
    with the Meta model doing it. No phone at hand: **Use sample video**.
-5. **Me**: the style quiz (59 styles) and your measurements. **Set up my measurements and style** on the first
+5. **Me**: the style quiz (61 styles) and your measurements. **Set up my measurements and style** on the first
    screen walks through both from the start.
 
 On an iPhone, **Share → Add to Home Screen** opens it full screen like an app. Android: the APK from the Expo build
@@ -101,7 +101,7 @@ and on real photos: `npm run demo:compose -w @twin/server`.
   ("fits, with one catch"), the size that fixes it, and a comparison with a favourite piece you own
   (`packages/shared/src/fit.ts`). Coloured labels sit on the try-on. Sizes S/M/L appear only if you turn them on.
 - **Measurements, optional** — height alone is enough; the rest sharpens the fit. Private, deleted from Me.
-- **Style quiz** — 59 niche styles in 12 families (old money, poetcore, gorpcore, Y3K…), men's and women's looks;
+- **Style quiz** — 61 styles in 13 families, from everyday casual and smart casual to old money, poetcore, gorpcore and Y3K, men's and women's looks;
   a profile of 1–3 styles with weights, colours and what to leave out goes into outfits and Twin
   (`packages/shared/src/style.ts`).
 - **Smart body and piece scan** — a live coach on the device: full body in frame, distance, centre, arms, angle, light

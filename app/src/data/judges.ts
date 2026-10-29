@@ -11,7 +11,7 @@ export const JUDGE_STEPS: JudgeStep[] = [
   { title: 'Drop a screenshot from any store', sub: 'Try on: drag it onto the page or pick a file', href: '/try' },
   { title: 'See it on you, then tap Fit', sub: 'Four angles, and how it fits zone by zone', href: '/result' },
   { title: 'Scan with your phone', sub: 'A QR code: film on the phone, the steps run here', href: '/scan' },
-  { title: 'Your style and measurements', sub: 'A quiz of 59 styles, fit without a size label', href: '/me' },
+  { title: 'Your style and measurements', sub: 'A quiz of 61 styles, fit without a size label', href: '/me' },
 ];
 
 export interface ModelUse {

@@ -4,7 +4,7 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { extname, join } from 'node:path'
-import type { DeviceState, Job, PricePoint, StoreSale, Upload, WatchItem } from '@twin/shared'
+import type { DeviceState, Job, PricePoint, StoreSale, TrendDigest, Upload, WatchItem } from '@twin/shared'
 import { MAX_REMOTE_FILE, type RemoteFile, type Supabase } from './supabase'
 
 interface Db {
@@ -18,10 +18,12 @@ interface Db {
   sales: StoreSale[]
   /** шкаф и примерка каждого устройства (общие для компьютера и телефона, подключённого по QR) */
   devices: (DeviceState & { id: string })[]
+  /** выжимка трендов по странам (Muse Spark, раз в неделю) */
+  trends: { country: string; checkedAt: string; digest: TrendDigest }[]
 }
 
 type Collection = keyof Db
-const COLLECTIONS: Collection[] = ['uploads', 'jobs', 'watch', 'prices', 'sales', 'devices']
+const COLLECTIONS: Collection[] = ['uploads', 'jobs', 'watch', 'prices', 'sales', 'devices', 'trends']
 
 export const MIME: Record<string, string> = { '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm' }
 
@@ -48,7 +50,7 @@ export class Store {
     mkdirSync(this.files, { recursive: true })
     this.dbPath = join(dir, 'db.json')
     const local = !remote && existsSync(this.dbPath) ? (JSON.parse(readFileSync(this.dbPath, 'utf8')) as Partial<Db>) : {}
-    this.db = { uploads: [], jobs: [], watch: [], prices: [], sales: [], devices: [], ...(saved ?? local) }
+    this.db = { uploads: [], jobs: [], watch: [], prices: [], sales: [], devices: [], trends: [], ...(saved ?? local) }
     // задачи, которые шли во время перезапуска, уже не доедут
     const stuck = this.db.jobs.filter((j) => j.status === 'queued' || j.status === 'running')
     for (const j of stuck) Object.assign(j, { status: 'failed', error: 'Сервер перезапустился во время задачи', errorCode: 'internal' })
@@ -140,6 +142,15 @@ export class Store {
   setSale(sale: StoreSale): void {
     this.db.sales = [...this.db.sales.filter((s) => !(s.storeId === sale.storeId && s.country === sale.country)), sale]
     this.save('sales')
+  }
+
+  trends(country: string): Db['trends'][number] | undefined {
+    return this.db.trends.find((t) => t.country === country)
+  }
+
+  setTrends(country: string, digest: TrendDigest, checkedAt: string): void {
+    this.db.trends = [...this.db.trends.filter((t) => t.country !== country), { country, checkedAt, digest }]
+    this.save('trends')
   }
 
   device(id: string): DeviceState | undefined {

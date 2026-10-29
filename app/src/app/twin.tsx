@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -57,7 +57,9 @@ export default function TwinScreen() {
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const nextId = useRef(1);
   const [messages, setMessages] = useState<Message[]>([{ id: 0, from: 'twin', text: 'Hi, I know your closet and the pieces you are eyeing. Tell me the plan and I will put an outfit together.' }]);
-  const [draft, setDraft] = useState('');
+  // из Looks → Trending приходит готовый вопрос; отправляет его сам человек
+  const { ask } = useLocalSearchParams<{ ask?: string }>();
+  const [draft, setDraft] = useState(() => (typeof ask === 'string' ? ask.slice(0, 200) : ''));
   const [listening, setListening] = useState(false);
   const [tick, setTick] = useState(0);
 
