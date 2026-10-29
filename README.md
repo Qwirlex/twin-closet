@@ -123,6 +123,14 @@ Waiting for the hackathon API key: the SAM 3.1, Muse Spark and Muse Image calls 
 (prompts and schemas are ready in `server/src/models/`). Until then the app says so at the step that needs the key,
 and the laptop guide shows "waiting for the hackathon API key".
 
+## Built during the hackathon
+
+The building period was 27 October – 4 November 2026 (kickoff on 26 October). Before the kickoff, on 25 October, the
+repository got only a skeleton (the Expo starter app, a 25-line Hono server, a first draft of the Meta API client and
+shared types) and design and planning notes
+(`docs/`, `PLAN.md`) — 8 commits. Every feature in this README was built from 27 October on; the full history is in
+the commit log.
+
 ## Code
 
 - `app/` — Expo (React Native) app: iOS, Android and web from one codebase. Design system "Noir" (`docs/design.md`).
