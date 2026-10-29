@@ -147,6 +147,14 @@ describe('product lookup', () => {
     expect(done.steps.map((s) => s.model)).toEqual(['Muse Spark', 'Muse Spark'])
   })
 
+  it('online and cheap stores are live too: Temu and Zalando search waits for the key', async () => {
+    const { app, jobs } = setup()
+    for (const lookup of [{ storeId: 'temu', ref: '601099512345678', country: 'IE' }, { storeId: 'zalando', query: 'straight jeans', country: 'DE' }]) {
+      const job = (await (await start(app, lookup)).json()) as Job
+      expect((await jobs.wait(job.id)).errorCode).toBe('no_key')
+    }
+  })
+
   it('says other stores are coming soon', async () => {
     const { app } = setup()
     const res = await start(app, { storeId: 'mango', query: 'linen shirt', country: 'IE' })

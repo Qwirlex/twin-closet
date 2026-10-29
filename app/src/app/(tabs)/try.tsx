@@ -1,3 +1,4 @@
+import { isLiveStore, LIVE_STORES } from '@twin/shared';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
@@ -186,6 +187,11 @@ export default function TryScreen() {
               <T size={13} color={t.muted} numberOfLines={2}>
                 {it.meta}
               </T>
+              {isLiveStore(it.shop?.storeId) && LIVE_STORES[it.shop.storeId].sizing ? (
+                <T size={12} color={t.warn} lh={1.35}>
+                  {LIVE_STORES[it.shop.storeId].sizing}
+                </T>
+              ) : null}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 2, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999, borderWidth: 1, borderColor: it.pending ? t.accent : t.line }}>
                 {it.stage === 'uploading' || it.stage === 'working' ? <ActivityIndicator size="small" color={t.accent} style={{ transform: [{ scale: 0.6 }], width: 12, height: 12 }} /> : null}
                 <T size={11} color={it.pending ? t.accent : t.muted}>

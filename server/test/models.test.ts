@@ -1,4 +1,4 @@
-import type { Job } from '@twin/shared'
+import { LIVE_STORES, type Job } from '@twin/shared'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -23,7 +23,7 @@ function assertStrict(schema: unknown, path = '$'): void {
   if (s.items) assertStrict(s.items, `${path}[]`)
 }
 
-const TASKS: spark.Task<unknown>[] = [spark.detectGarments, spark.tagGarment, spark.dedupeGarments, spark.pickAngles, spark.readTag, spark.findSimilar, spark.buildLooks, spark.checkTryOn, spark.findProduct({ name: 'Zara', domain: 'zara.com' }), spark.storeSale({ name: 'Zara', domain: 'zara.com' })]
+const TASKS: spark.Task<unknown>[] = [spark.detectGarments, spark.tagGarment, spark.dedupeGarments, spark.pickAngles, spark.readTag, spark.findSimilar, spark.buildLooks, spark.checkTryOn, spark.findProduct(LIVE_STORES.zara), spark.storeSale(LIVE_STORES.zara)]
 
 /** Подставной Meta API: отвечает по очереди заготовками и запоминает запросы */
 function fakeMeta(replies: (Response | (() => Response))[]) {
@@ -54,7 +54,7 @@ describe('Muse Spark tasks', () => {
   })
 
   it('store search uses web search for the person’s country', () => {
-    const body = spark.requestBody(spark.findProduct({ name: 'Zara', domain: 'zara.com' }), [spark.text('REF 1234/567/800')], { webSearchCountry: 'IE' })
+    const body = spark.requestBody(spark.findProduct(LIVE_STORES.zara), [spark.text('REF 1234/567/800')], { webSearchCountry: 'IE' })
     expect(body.tools).toEqual([{ type: 'web_search', search_context_size: 'medium', user_location: { type: 'approximate', country: 'IE' } }])
     expect(body.include).toEqual(['web_search_call.results'])
   })

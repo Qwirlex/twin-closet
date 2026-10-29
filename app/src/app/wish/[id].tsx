@@ -1,4 +1,4 @@
-import type { PricePoint } from '@twin/shared';
+import { isLiveStore, LIVE_STORES, type PricePoint } from '@twin/shared';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -130,6 +130,11 @@ export default function WishScreen() {
         <T size={13} color={t.muted} lh={1.4} accessibilityLiveRegion="polite">
           {status}
         </T>
+        {isLiveStore(wish.storeId) && LIVE_STORES[wish.storeId].sizing ? (
+          <T size={13} color={t.warn} lh={1.4}>
+            {LIVE_STORES[wish.storeId].sizing}
+          </T>
+        ) : null}
         {storeSale?.onSale ? (
           <T size={13} color={t.accent}>
             {store?.name} sale is on in {countryName(storeSale.country)} — checked daily now.

@@ -1,8 +1,8 @@
 // Слежка за ценой вещей из вишлиста (docs/spec-stores-wishlist.md, «Скидки v2»).
 // Цену берём только из веб-поиска Muse Spark и только со страниц того же магазина; сайты и API магазинов не трогаем.
 // Экономия: раз в день спрашиваем «идёт ли распродажа» по магазину; вещи — каждый день только в распродажу, иначе раз в неделю.
-import { LIVE_STORE_DOMAINS, LIVE_STORE_IDS, type PricePoint, type ProductHit, type StoreSale, type WatchItem } from '@twin/shared'
-import { STORE_NAMES, type Jobs } from './jobs'
+import { isLiveStore, isStorePage, LIVE_STORES, type PricePoint, type ProductHit, type StoreSale, type WatchItem } from '@twin/shared'
+import type { Jobs } from './jobs'
 import { runTask, storeSale, text } from './models/spark'
 import type { MetaApi } from './meta'
 import type { Store } from './store'
@@ -22,19 +22,8 @@ export interface Search {
 /** Ключ вещи на сервере: у разных устройств могут быть вещи с одним id */
 const key = (w: { owner?: string; id: string }) => `${w.owner ?? ''}:${w.id}`
 
-const isLive = (id: string): id is (typeof LIVE_STORE_IDS)[number] => (LIVE_STORE_IDS as readonly string[]).includes(id)
-
-/** Страница того же магазина (zara.com, www.zara.com/ie/en/…) */
-export function sameStorePage(url: string, storeId: string): boolean {
-  if (!isLive(storeId)) return false
-  try {
-    const host = new URL(url).hostname.toLowerCase()
-    const domain = LIVE_STORE_DOMAINS[storeId]
-    return host === domain || host.endsWith(`.${domain}`)
-  } catch {
-    return false
-  }
-}
+/** Страница того же магазина (zara.com, www.zara.com/ie/en/…, zalando.ie для Zalando) */
+export const sameStorePage = (url: string, storeId: string): boolean => isStorePage(url, storeId)
 
 const digits = (s: string) => s.replace(/\D/g, '')
 
@@ -134,7 +123,8 @@ export class PriceWatch {
         return done.status === 'done' ? (done.result.products?.[0] ?? null) : null
       },
       async storeSale(storeId, country) {
-        const store = { name: STORE_NAMES[storeId] ?? storeId, domain: LIVE_STORE_DOMAINS[storeId as keyof typeof LIVE_STORE_DOMAINS] }
+        if (!isLiveStore(storeId)) return { onSale: false, source: null }
+        const store = LIVE_STORES[storeId]
         const { data } = await runTask(meta, storeSale(store), [text(`Country: ${country}`)], { webSearchCountry: country })
         return { onSale: data.on_sale, source: data.source_url }
       }
@@ -161,7 +151,7 @@ export class PriceWatch {
   put(owner: string, items: WatchInput[]): WatchItem[] {
     const prev = new Map(this.store.watch().filter((w) => w.owner === owner).map((w) => [w.id, w]))
     const next = items
-      .filter((i) => isLive(i.storeId) && (i.ref || i.url || i.name))
+      .filter((i) => isLiveStore(i.storeId) && (i.ref || i.url || i.name))
       .slice(0, 200)
       .map((i): WatchItem => {
         const old = prev.get(i.id)

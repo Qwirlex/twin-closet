@@ -65,7 +65,8 @@ function readJson<T>(key: string, fallback: T): T {
 }
 
 /** В демо-аккаунте любимые — три живых магазина */
-const DEFAULT_FAVORITES = [...LIVE_STORE_IDS];
+// по умолчанию — три магазина, с которых начинали; остальные живые человек отмечает сам
+const DEFAULT_FAVORITES = ['zara', 'bershka', 'pull-and-bear'];
 
 interface WishDoc {
   wishlist: Wish[];

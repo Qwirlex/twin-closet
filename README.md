@@ -93,7 +93,8 @@ and on real photos: `npm run demo:compose -w @twin/server`.
 - Each device keeps its own wishlist on the server; accounts with owner-only access (Supabase RLS) are prepared
   in `supabase/migrations/`.
 - Product data comes only from the user's own photos and from Muse Spark search results. The app does not scrape store
-  websites or call their private APIs. Zara, Bershka and Pull & Bear are live; other shops are coming soon.
+  websites or call their private APIs. Live stores: Zara, Bershka, Pull & Bear, ASOS, Zalando, H&M, Shein, AliExpress
+  and Temu (`packages/shared/src/stores.ts`); other brands are in the list and coming soon.
 
 ## Built and working now
 
@@ -109,6 +110,8 @@ and on real photos: `npm run demo:compose -w @twin/server`.
   (`packages/shared/src/scan.ts`).
 - **Wishlist and price drops** — favourite stores by country, sale mode, a second check before a drop counts,
   90-day price history and your own target price.
+- **Online and cheap stores** — ASOS, Zalando (every country site), H&M, Shein, AliExpress and Temu next to Zara;
+  a pasted product link is recognised with its item number, and cheap stores warn that sizes run small.
 - **Judges' path** — demo account, the laptop guide, continue on your phone by QR, demo limits. The sample videos
   for "Use sample video" are filmed and cached once the key arrives.
 

@@ -1,6 +1,6 @@
 // Muse Spark: все шаги, где модель смотрит и решает. Каждый шаг — промпт + JSON-схема (ответ по схеме гарантирован API).
 // Схемы строгие: все поля обязательны, лишних нет, «нет значения» — null (так требует strict json_schema).
-import { cleanDigest, GARMENT_KINDS, liveDetail, STYLE_IDS, stylePrompt, TREND_KINDS, trendPrompt, type GarmentKind, type OutfitPiece, type StyleProfile, type TrendDigest } from '@twin/shared'
+import { cleanDigest, GARMENT_KINDS, isStorePage, liveDetail, STYLE_IDS, stylePrompt, TREND_KINDS, trendPrompt, type GarmentKind, type LiveStore, type OutfitPiece, type StyleProfile, type TrendDigest } from '@twin/shared'
 import sharp from 'sharp'
 import { citations, MODELS, outputText, type MetaApi, type ResponsesOutput } from '../meta'
 
@@ -285,15 +285,23 @@ export interface FoundProducts {
   products: { title: string; url: string; price: number | null; currency: string | null; in_stock: boolean | null }[]
 }
 
-export function findProduct(store: { name: string; domain: string }): Task<FoundProducts> {
+/** Как искать в магазине этого типа: у маркетплейса много продавцов, у мультибренда — бренд + модель */
+const STORE_RULES: Record<LiveStore['type'], string> = {
+  brand: 'Match the article reference exactly when one is given.',
+  multibrand: 'It sells many brands: search for the brand and the model; the product number in a link is exact when one is given.',
+  marketplace: 'Many sellers list the same item: prefer the item page with the most orders and good reviews. Only item pages count, never search results or seller shops. A product number is exact when one is given.'
+}
+
+export function findProduct(store: LiveStore): Task<FoundProducts> {
+  const sites = store.domains.join(', ')
   return {
     name: 'store_product',
     effort: 'low',
     system: `${BASE_RULES}
-Search the web for one clothing item in one store: ${store.name}, website ${store.domain}.
-Only product pages on ${store.domain} count (any country path). Prefer the page for the person's country.
-Match the article reference exactly when one is given. "price" is the current price on that page in its currency, as a number.
-If you cannot find the item on ${store.domain}, return an empty list. Never return pages from other sites.`,
+Search the web for one clothing item in one store: ${store.name}, website ${store.domains[0]}.
+Only product pages on ${sites} count (any country path). Prefer the page for the person's country.
+${STORE_RULES[store.type]} "price" is the current price on that page in its currency, as a number.
+If you cannot find the item there, return an empty list. Never return pages from other sites.`,
     schema: obj({ products: arr(obj({ title: str, url: str, price: numOrNull, currency: strOrNull, in_stock: { type: ['boolean', 'null'] } })) })
   }
 }
@@ -304,28 +312,21 @@ export interface SaleStatus {
   ends: string | null
 }
 
-export function storeSale(store: { name: string; domain: string }): Task<SaleStatus> {
+export function storeSale(store: LiveStore): Task<SaleStatus> {
   return {
     name: 'store_sale',
     effort: 'low',
     system: `${BASE_RULES}
-Is ${store.name} (${store.domain}) running a sale (seasonal sale, Black Friday, a site-wide discount) in the person's country right now?
-Use today's information from the web. "source_url" is the page that shows it (prefer ${store.domain}), "ends" the end date if stated (YYYY-MM-DD).
+Is ${store.name} (${store.domains[0]}) running a sale (seasonal sale, Black Friday, a site-wide discount) in the person's country right now?
+Use today's information from the web. "source_url" is the page that shows it (prefer ${store.domains[0]}), "ends" the end date if stated (YYYY-MM-DD).
 If you are not sure, answer false.`,
     schema: obj({ on_sale: bool, source_url: strOrNull, ends: strOrNull })
   }
 }
 
 /** Ссылки на страницы магазина — и из ответа, и из цитат (на случай, если модель не вписала ссылку в JSON) */
-export function storeLinks(raw: ResponsesOutput, domain: string): string[] {
+export function storeLinks(raw: ResponsesOutput, storeId: string): string[] {
   return citations(raw)
     .map((c) => c.url)
-    .filter((u) => {
-      try {
-        const host = new URL(u).hostname
-        return host === domain || host.endsWith(`.${domain}`)
-      } catch {
-        return false
-      }
-    })
+    .filter((u) => isStorePage(u, storeId))
 }

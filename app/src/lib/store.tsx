@@ -1,4 +1,4 @@
-import { cleanBody, cleanStyle, fitReport, type BodyMeasurements, type FitReport, type Garment, type StyleProfile } from '@twin/shared';
+import { cleanBody, cleanStyle, fitReport, LIVE_STORES, storeOfUrl, type BodyMeasurements, type FitReport, type Garment, type StyleProfile } from '@twin/shared';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
@@ -113,9 +113,11 @@ function readDoc(raw: unknown): ClosetDoc | null {
   };
 }
 
-/** Ссылка на товар: страницу прочитает Muse Spark (у него есть веб-поиск), пока ждёт ключ */
+/** Ссылка на товар: живой магазин и номер товара узнаём сразу; страницу прочитает Muse Spark (веб-поиск), пока ждёт ключ */
 export function linkPiece(url: string, host: string): Item {
-  return { id: `new-${Date.now()}`, name: host, meta: 'Muse Spark reads the product page once the Meta key is connected', kind: null, image: { uri: '' }, via: 'Link', pending: true, stage: 'waiting', shop: { price: null, url } };
+  const known = storeOfUrl(url);
+  const name = known ? `${LIVE_STORES[known.storeId].name}${known.productId ? ` · item ${known.productId}` : ''}` : host;
+  return { id: `new-${Date.now()}`, name, meta: 'Muse Spark reads the product page once the Meta key is connected', kind: null, image: { uri: '' }, via: 'Link', pending: true, stage: 'waiting', shop: { price: null, url, storeId: known?.storeId ?? null, ref: known?.productId ?? null } };
 }
 
 export function garmentToItem(g: Garment, via?: Item['via']): Item {

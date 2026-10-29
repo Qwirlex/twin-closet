@@ -232,16 +232,6 @@ export interface StoreSale {
   checkedAt: string
 }
 
-/** Магазины, где поиск вещей и слежка за ценой уже работают; остальные — «Coming soon» */
-export const LIVE_STORE_IDS = ['zara', 'bershka', 'pull-and-bear'] as const
-
-/** Сайты живых магазинов: цену принимаем только со страниц этих доменов */
-export const LIVE_STORE_DOMAINS: Record<(typeof LIVE_STORE_IDS)[number], string> = {
-  zara: 'zara.com',
-  bershka: 'bershka.com',
-  'pull-and-bear': 'pullandbear.com'
-}
-
 /**
  * Состояние устройства на сервере: шкаф, примерка и образы, которые человек добавил сам (без демо-аккаунта).
  * Нужно, чтобы телефон, подключённый к компьютеру по QR, и компьютер видели одно и то же.
@@ -260,3 +250,4 @@ export * from './fit'
 export * from './style'
 export * from './scan'
 export * from './trends'
+export * from './stores'

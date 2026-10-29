@@ -1,4 +1,4 @@
-import type { StoreBrand } from '@twin/shared';
+import { LIVE_STORE_IDS, LIVE_STORES, type StoreBrand } from '@twin/shared';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, TextInput, View } from 'react-native';
@@ -102,7 +102,7 @@ export default function StoresScreen() {
         <GoldRim radius={18} style={{ paddingVertical: 12, paddingHorizontal: 14, gap: 4 }}>
           <Label accent>Other shops coming soon</Label>
           <T size={14} lh={1.45}>
-            Zara, Bershka and Pull & Bear are live: Twin finds pieces there and watches prices. You can already add the rest to your stores.
+            {`Live: ${LIVE_STORE_IDS.map((id) => LIVE_STORES[id].name).join(', ')}. Twin finds pieces there and watches prices. You can already add the rest to your stores.`}
           </T>
         </GoldRim>
         <T size={11} color={t.muted} lh={1.5}>

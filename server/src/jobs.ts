@@ -2,7 +2,7 @@
 // Всё, что не требует моделей (видео → MP4, ключевые кадры), работает уже сейчас; шаги моделей ждут ключ Meta.
 import { copyFileSync, existsSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
-import { LIVE_STORE_DOMAINS, LIVE_STORE_IDS, SHOT_RULES, type Job, type JobErrorCode, type JobInput, type JobKind, type JobResult, type JobStep, type MediaInfo, type SampleName, type ShotView } from '@twin/shared'
+import { isLiveStore, isStorePage, LIVE_STORE_IDS, LIVE_STORES, SHOT_RULES, type Job, type JobErrorCode, type JobInput, type JobKind, type JobResult, type JobStep, type MediaInfo, type SampleName, type ShotView } from '@twin/shared'
 import { keyframes, normalizeImage, normalizeVideo, probe } from './media'
 import { findProduct, runTask, storeLinks, text, type FoundProducts } from './models/spark'
 import type { MetaApi } from './meta'
@@ -69,7 +69,7 @@ const KEYFRAMES: Partial<Record<JobKind, number>> = { closet_scan: 8, body_scan:
 
 const SAMPLE_EXT = ['.mp4', '.mov', '.jpg', '.jpeg', '.png', '.webp']
 
-export const STORE_NAMES: Record<string, string> = { zara: 'Zara', bershka: 'Bershka', 'pull-and-bear': 'Pull & Bear' }
+export const STORE_NAMES: Record<string, string> = Object.fromEntries(LIVE_STORE_IDS.map((id) => [id, LIVE_STORES[id].name]))
 
 /** Общее между шагами одной задачи */
 interface StepContext {
@@ -135,7 +135,7 @@ export class Jobs {
 
   private source(input: JobInput, kind: JobKind): Source {
     if ('lookup' in input) {
-      if (!(LIVE_STORE_IDS as readonly string[]).includes(input.lookup.storeId)) throw new JobError('bad_input', 'Searching this store is coming soon.')
+      if (!isLiveStore(input.lookup.storeId)) throw new JobError('bad_input', 'Searching this store is coming soon.')
       if (!input.lookup.ref?.trim() && !input.lookup.query?.trim()) throw new JobError('bad_input', 'Send the REF from the tag or a short description.')
       return { path: null, sample: null }
     }
@@ -277,14 +277,15 @@ export class Jobs {
   private async modelStep(kind: JobKind, key: string, ctx: StepContext): Promise<void> {
     if (kind === 'product_lookup' && 'lookup' in ctx.input) {
       const q = ctx.input.lookup
-      const store = { name: STORE_NAMES[q.storeId] ?? q.storeId, domain: LIVE_STORE_DOMAINS[q.storeId as keyof typeof LIVE_STORE_DOMAINS] }
+      if (!isLiveStore(q.storeId)) throw new JobError('bad_input', 'Searching this store is coming soon.')
+      const store = LIVE_STORES[q.storeId]
       if (key === 'search') {
         const lines = [q.ref ? `Article reference (REF): ${q.ref}` : null, q.query ? `Item: ${q.query}` : null, `Country: ${q.country}`].filter(Boolean)
         const { data, raw } = await runTask(this.meta, findProduct(store), [text(lines.join('\n'))], { webSearchCountry: q.country }).catch((e) => {
           throw new JobError('model', `Muse Spark search failed: ${e instanceof Error ? e.message : e}`)
         })
         ctx.scratch.products = data.products
-        ctx.scratch.links = storeLinks(raw, store.domain)
+        ctx.scratch.links = storeLinks(raw, store.id)
         return
       }
       if (key === 'read') {
@@ -297,10 +298,7 @@ export class Jobs {
             return null
           }
         }
-        const onStore = (u: string) => {
-          const h = host(u)
-          return !!h && (h === store.domain || h.endsWith(`.${store.domain}`))
-        }
+        const onStore = (u: string) => isStorePage(u, store.id)
         // ссылка с другого сайта — вещь отбрасываем; битую или пустую ссылку заменяем страницей магазина из цитат
         const spare = links.filter((l) => !found.some((p) => p.url === l))
         ctx.result.products = found
