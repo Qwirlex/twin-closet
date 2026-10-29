@@ -170,6 +170,9 @@ export function profileFromVotes(votes: Partial<Record<StyleId, StyleVote>>): St
   return { styles, colors: colorsFor(styles), avoid }
 }
 
+/** Демо-аккаунт: готовый ответ на опрос — под него собраны демо-образы, судья сразу видит «In your style» */
+export const DEMO_STYLE: StyleProfile = profileFromVotes({ nineties_minimal: 'love', military: 'like', scandi_minimal: 'like' })!
+
 /** Веса в процентах, сумма ровно 100 (остаток от округления — главному стилю) */
 function withWeights(scored: { id: StyleId; points: number }[]): StyleProfile['styles'] {
   const total = scored.reduce((sum, s) => sum + s.points, 0)

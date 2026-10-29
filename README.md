@@ -13,13 +13,19 @@ Muse Voice Transcribe.
 
 **Web version: https://twin-closet.vercel.app** (API: https://twin-closet-api.onrender.com/health)
 
-1. Open the web version and tap **Explore the demo account**: a closet, a body scan and two pieces to try are ready.
-2. **Try on → Screenshot**: drop any product screenshot from a store onto the page. It is cut out, read and compared
-   with the closet.
-3. **Scan → Scan with your phone**: a QR code opens the same closet on your phone (any phone, in the browser,
+On a laptop a guide for judges sits next to the app: what to try, which Meta model does each step and whether
+the models are live right now.
+
+1. Tap **Explore the demo account**. You land on **Try on**: the demo person already has a closet, a body scan,
+   measurements and a style profile, and two pieces are waiting to be tried.
+2. **Drop a screenshot** of any piece from any store onto the page. It is cut out, read and compared with the closet.
+3. **See it on me**: compare your clothes and the try-on with the slider, turn the angle dial, then tap **Fit** —
+   how the piece sits zone by zone (waist, hips, length…) and next to a favourite pair you already own.
+4. **Scan → Scan with your phone**: a QR code opens the same closet on your phone (any phone, in the browser,
    nothing to install). Film your rail or a slow spin there — the steps run on your laptop screen, each labelled
    with the Meta model doing it. No phone at hand: **Use sample video**.
-4. **Try on → See it on me**: compare your clothes and the try-on with the slider, turn the angle dial.
+5. **Me**: the style quiz (59 styles) and your measurements. **Set up my measurements and style** on the first
+   screen walks through both from the start.
 
 On an iPhone, **Share → Add to Home Screen** opens it full screen like an app. Android: the APK from the Expo build
 also takes **Share → Twin Closet** from Instagram or a store app.
@@ -40,13 +46,19 @@ sample results are cached and free.
 | | **Muse Spark** | reads brand, REF, price, sale price, size and fabric from the tag |
 | | **Muse Spark** + web search | finds the same piece online in the person's country |
 | "You already own this" | **Muse Spark** | compares the new piece with the closet |
-| Outfits | **Muse Spark** | builds 3 looks from the new piece and the closet |
+| Fit | **Muse Spark** + web search | reads the size chart, cut and fabric from the product page |
+| | **SAM 3.1** | measures a favourite piece laid flat next to an A4 sheet |
+| Style | **Muse Spark** | reads the style of the person's own outfit photos (Pinterest, gallery) |
+| Outfits | **Muse Spark** | builds 3 looks from the new piece and the closet, in the person's style |
 | Try-on | **Muse Image** | dresses the person's photo, image search turned off |
 | | **SAM 3.1** | masks the result so face, hair and hands are pasted back from the original |
 | | **Muse Spark** | checks the result: same person, same pose, garment matches, no seams |
 | Price drops | **Muse Spark** + web search | daily "is the store on sale?" and wishlist prices |
 | Twin, the stylist | **Muse Spark** (tools) | outfits from the closet, wishlist and favourite stores |
 | | **Muse Voice Transcribe** | voice input in the chat |
+
+Not a Meta model: the live coach in the body scan (pose, distance, light, stillness) runs on the device with
+MediaPipe Pose, so the camera takes the four photos by itself and nothing is uploaded until they are good.
 
 ```mermaid
 flowchart LR
@@ -55,7 +67,7 @@ flowchart LR
   server -->|masks and tracks| sam["SAM 3.1"]
   server -->|try-on images| image["Muse Image"]
   server -->|voice| voice["Muse Voice Transcribe"]
-  spark -->|web search| stores["Store pages<br/>Zara, Bershka, Pull & Bear"]
+  spark -->|web search| stores["Store pages<br/>size charts, prices, sales"]
   server -->|"result: original pixels except clothes"| phone
 ```
 
@@ -83,12 +95,30 @@ and on real photos: `npm run demo:compose -w @twin/server`.
 - Product data comes only from the user's own photos and from Muse Spark search results. The app does not scrape store
   websites or call their private APIs. Zara, Bershka and Pull & Bear are live; other shops are coming soon.
 
+## Built and working now
+
+- **Fit by zones, never one size label** — room at chest, waist, hips, length and leg for each piece, a verdict
+  ("fits, with one catch"), the size that fixes it, and a comparison with a favourite piece you own
+  (`packages/shared/src/fit.ts`). Coloured labels sit on the try-on. Sizes S/M/L appear only if you turn them on.
+- **Measurements, optional** — height alone is enough; the rest sharpens the fit. Private, deleted from Me.
+- **Style quiz** — 59 niche styles in 12 families (old money, poetcore, gorpcore, Y3K…), men's and women's looks;
+  a profile of 1–3 styles with weights, colours and what to leave out goes into outfits and Twin
+  (`packages/shared/src/style.ts`).
+- **Smart body and piece scan** — a live coach on the device: full body in frame, distance, centre, arms, angle, light
+  and stillness, then the photo takes itself; pieces front → back → label, the in-store tag sharper still
+  (`packages/shared/src/scan.ts`).
+- **Wishlist and price drops** — favourite stores by country, sale mode, a second check before a drop counts,
+  90-day price history and your own target price.
+- **Judges' path** — demo account, the laptop guide, continue on your phone by QR, demo limits. The sample videos
+  for "Use sample video" are filmed and cached once the key arrives.
+
 ## Status
 
-Built and tested now: all screens on the demo account, uploads and jobs with steps, video to H.264 and key frames,
-try-on compositing, store search and sale checks on Muse Spark, wishlist price watch, demo limits, 48-hour cleanup.
+Built and tested now: everything above, uploads and jobs with steps, video to H.264 and key frames, try-on
+compositing, store search and sale checks on Muse Spark, demo limits, 48-hour cleanup.
 Waiting for the hackathon API key: the SAM 3.1, Muse Spark and Muse Image calls inside scans and try-ons
-(prompts and schemas are ready in `server/src/models/`). Until then the app says so at the step that needs the key.
+(prompts and schemas are ready in `server/src/models/`). Until then the app says so at the step that needs the key,
+and the laptop guide shows "waiting for the hackathon API key".
 
 ## Code
 

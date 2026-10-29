@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanStyle, clashesWith, profileFromVotes, STYLE_FAMILIES, STYLE_IDS, styleLine, styleMatch, stylePrompt, STYLES, stylesIn } from '@twin/shared'
+import { cleanStyle, clashesWith, DEMO_STYLE, profileFromVotes, STYLE_FAMILIES, STYLE_IDS, styleLine, styleMatch, stylePrompt, STYLES, stylesIn } from '@twin/shared'
 
 describe('style guide', () => {
   it('has many styles, each with pieces, fabrics and colours', () => {
@@ -108,5 +108,17 @@ describe('styleMatch and prompt', () => {
 
   it('without a profile only the live-detail rule is left', () => {
     expect(stylePrompt(null)).toMatch(/^No plain basics/)
+  })
+})
+
+describe('demo account style', () => {
+  it('is a real quiz result that the demo looks belong to', () => {
+    expect(cleanStyle(DEMO_STYLE)).toEqual(DEMO_STYLE)
+    expect(DEMO_STYLE.styles.map((s) => s.id)).toEqual(['nineties_minimal', 'scandi_minimal', 'military'])
+    const weights = DEMO_STYLE.styles.map((s) => s.weight)
+    expect([...weights].sort((a, b) => b - a)).toEqual(weights)
+    // стили четырёх демо-образов (app/src/data/demo.ts): каждый образ — «в стиле»
+    const looks = [['military', 'skater'], ['scandi_minimal', 'nineties_minimal'], ['military', 'nineties_minimal'], ['scandi_minimal', 'normcore']] as const
+    for (const tags of looks) expect(styleMatch([...tags], DEMO_STYLE)).toBeGreaterThan(0)
   })
 })
