@@ -19,6 +19,8 @@ export interface ObjectPrompt {
   box?: { x1: number; y1: number; x2: number; y2: number }
   /** точки: positive — «это объект», negative — «это не объект» */
   points?: { x: number; y: number; negative?: boolean }[]
+  /** кадр видео, на котором стоит подсказка (у вещей шкафа — свой ключевой кадр); по умолчанию общий */
+  frame?: number
 }
 
 /**
@@ -35,7 +37,7 @@ export function objectPrompt(objects: ObjectPrompt[], width: number, height: num
       id: o.id,
       prompts: [
         {
-          frame,
+          frame: o.frame ?? frame,
           box: o.box && { left: clamp(o.box.x1, width - 1), top: clamp(o.box.y1, height - 1), right: clamp(o.box.x2, width), bottom: clamp(o.box.y2, height) },
           points: o.points?.map((p) => ({ x: clamp(p.x, width - 1), y: clamp(p.y, height - 1), label: p.negative ? ('negative' as const) : ('positive' as const) }))
         }

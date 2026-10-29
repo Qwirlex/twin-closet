@@ -6,6 +6,7 @@ import { ActivityIndicator, Platform, Pressable, TextInput, View } from 'react-n
 
 import { Thumb } from '@/components/garments';
 import { Icon, type IconName } from '@/components/icons';
+import { RenderOnMe } from '@/components/render-on-me';
 import { TabScreen } from '@/components/layout';
 import { Cta, Glass, Label, T, ThemeToggle } from '@/components/ui';
 import type { Item } from '@/data/demo';
@@ -213,6 +214,8 @@ export default function TryScreen() {
       </View>
 
       <Cta title="See it on me" sub={sub} disabled={!looks.length} onPress={() => router.push('/result')} />
+
+      <RenderOnMe pieces={tryOn} />
     </TabScreen>
   );
 }

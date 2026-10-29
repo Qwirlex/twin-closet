@@ -1,5 +1,5 @@
 // HTTP API: загрузки, задачи, файлы. Отдельно от запуска сервера — чтобы гонять в тестах через app.request
-import { checkShots, JOB_KINDS, MAX_DEVICE_STATE, SAMPLES, type JobInput, type JobKind, type LookupQuery, type SampleName, type Shot, type Upload } from '@twin/shared'
+import { checkShots, cleanStyle, GARMENT_KINDS, JOB_KINDS, type Angle, type ClosetRef, type TryOnRequest, MAX_DEVICE_STATE, SAMPLES, type JobInput, type JobKind, type LookupQuery, type SampleName, type Shot, type Upload } from '@twin/shared'
 import { getConnInfo } from '@hono/node-server/conninfo'
 import { Hono, type Context } from 'hono'
 import { cors } from 'hono/cors'
@@ -11,6 +11,8 @@ import type { MetaApi } from './meta'
 import { BadForm, saveFileField, UploadTooLarge } from './multipart'
 import { MIME, type Store } from './store'
 import { trendCountry, Trends } from './trends'
+import { buildOutfits, type LookPiece } from './pipeline/looks'
+import { twinTurn, type TwinContext } from './pipeline/twin'
 import { Limits, limitsFromEnv, type LimitKind } from './limits'
 import type { PriceWatch, WatchInput } from './watch'
 
@@ -63,6 +65,41 @@ export function createApp({ store, jobs, meta, watch, limits = new Limits(limits
   // тренды сезона по стране: с ключом — свежая выжимка Muse Spark раз в неделю, без ключа — curated
   app.get('/trends', (c) => c.json(trends.get(trendCountry(c.req.query('country')))))
 
+  // Twin: чат с Muse Spark и инструментами; без ключа — честный ответ, приложение тогда отвечает заготовками
+  app.post('/twin', async (c) => {
+    if (!meta.configured) return c.json({ error: 'Twin answers once the server has the Meta key.', code: 'no_key' }, 503)
+    const body = (await c.req.json().catch(() => null)) as { messages?: unknown; context?: unknown } | null
+    const messages = cleanMessages(body?.messages)
+    if (!messages.length || messages.at(-1)!.role !== 'user') return c.json({ error: 'Send the chat with the last message from the person.' }, 400)
+    const ctx = cleanTwinContext(body?.context)
+    const over = limited(c, 'job')
+    if (over) return over
+    limits.record(clientIp(c), 'job')
+    try {
+      return c.json(await twinTurn(meta, messages, ctx, trends.get(ctx.country)))
+    } catch (e) {
+      log(`twin: ${e instanceof Error ? e.message : e}`)
+      return c.json({ error: 'Twin could not answer right now. Try again.' }, 502)
+    }
+  })
+
+  // образы из новых вещей и шкафа в стиле человека
+  app.post('/looks', async (c) => {
+    if (!meta.configured) return c.json({ error: 'Outfits are built once the server has the Meta key.', code: 'no_key' }, 503)
+    const body = (await c.req.json().catch(() => null)) as { pieces?: unknown; style?: unknown; who?: unknown; country?: unknown } | null
+    const pieces = cleanPieces(body?.pieces)
+    if (!pieces.some((p) => p.isNew)) return c.json({ error: 'Send at least one new piece.' }, 400)
+    const over = limited(c, 'job')
+    if (over) return over
+    limits.record(clientIp(c), 'job')
+    try {
+      return c.json({ looks: await buildOutfits(meta, pieces, cleanStyle(body?.style), whoOf(body?.who), trends.get(trendCountry(typeof body?.country === 'string' ? body.country : undefined))) })
+    } catch (e) {
+      if (e instanceof JobError) return c.json({ error: e.message }, e.code === 'bad_input' ? 400 : 502)
+      throw e
+    }
+  })
+
   app.post('/uploads', async (c) => {
     const over = limited(c, 'upload')
     if (over) return over
@@ -95,7 +132,7 @@ export function createApp({ store, jobs, meta, watch, limits = new Limits(limits
   })
 
   app.post('/jobs', async (c) => {
-    const body = (await c.req.json().catch(() => null)) as { kind?: string; uploadId?: string; sample?: string; lookup?: LookupQuery; shots?: unknown } | null
+    const body = (await c.req.json().catch(() => null)) as { kind?: string; uploadId?: string; sample?: string; lookup?: LookupQuery; shots?: unknown; tryOn?: unknown; closet?: unknown; country?: unknown } | null
     if (!body || !JOB_KINDS.includes(body.kind as JobKind)) return c.json({ error: `kind: ${JOB_KINDS.join(' | ')}` }, 400)
     let input: JobInput
     if (body.lookup && typeof body.lookup.storeId === 'string') input = { lookup: { storeId: body.lookup.storeId, ref: body.lookup.ref, query: body.lookup.query, country: String(body.lookup.country ?? 'IE') } }
@@ -104,8 +141,19 @@ export function createApp({ store, jobs, meta, watch, limits = new Limits(limits
       if (bad) return c.json({ error: bad }, 400)
       input = { shots: (body.shots as Shot[]).map((s) => ({ uploadId: s.uploadId, view: s.view })) }
     } else if (body.uploadId) input = { uploadId: body.uploadId }
+    else if (body.kind === 'try_on' && body.tryOn) {
+      const t = cleanTryOn(body.tryOn)
+      if (!t) return c.json({ error: 'Send person, 1 to 4 garments with label and url, and an angle.' }, 400)
+      input = { tryOn: t }
+    }
     else if (SAMPLES.includes(body.sample as SampleName)) input = { sample: body.sample as SampleName }
     else return c.json({ error: 'Send uploadId or sample.' }, 400)
+    // новая вещь: с чем сравнить и где искать в магазине
+    if (body.kind === 'import_item') {
+      const closet = cleanCloset(body.closet)
+      if (closet.length) input.closet = closet
+      if (typeof body.country === 'string' && /^[A-Z]{2}$/.test(body.country)) input.country = body.country
+    }
     const over = limited(c, 'job')
     if (over) return over
     try {
@@ -202,4 +250,70 @@ export function createApp({ store, jobs, meta, watch, limits = new Limits(limits
   })
 
   return app
+}
+
+const ANGLES: Angle[] = ['front', 'three_quarter', 'side', 'back']
+const str = (v: unknown, max: number): string | null => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null)
+
+/** Шкаф для «у тебя уже есть»: только поля, которые нужны модели, не больше 200 вещей */
+export function cleanCloset(raw: unknown): ClosetRef[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .slice(0, 200)
+    .map((c) => (c && typeof c === 'object' ? (c as Record<string, unknown>) : {}))
+    .map((c) => ({ id: str(c.id, 80), title: str(c.title, 80), kind: GARMENT_KINDS.find((k) => k === c.kind) ?? null, color: str(c.color, 40) }))
+    .flatMap((c): ClosetRef[] => (c.id && c.title ? [{ id: c.id, title: c.title, kind: c.kind, color: c.color }] : []))
+}
+
+/** Вход примерки; ссылки проверяет сам конвейер (только свои файлы и сайт приложения) */
+export function cleanTryOn(raw: unknown): TryOnRequest | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  const person = str(r.person, 500)
+  const angle = ANGLES.find((a) => a === r.angle) ?? 'front'
+  const garments = Array.isArray(r.garments)
+    ? r.garments
+        .slice(0, 4)
+        .map((g) => (g && typeof g === 'object' ? (g as Record<string, unknown>) : {}))
+        .map((g) => ({ label: str(g.label, 80), url: str(g.url, 500), fit: str(g.fit, 200) ?? undefined }))
+        .filter((g): g is { label: string; url: string; fit: string | undefined } => !!g.label && !!g.url)
+    : []
+  return person && garments.length ? { person, garments, angle } : null
+}
+
+const whoOf = (v: unknown): 'men' | 'women' | 'all' => (v === 'women' || v === 'all' ? v : 'men')
+
+/** История чата: до 30 сообщений, текст до 2000 знаков */
+export function cleanMessages(raw: unknown): { role: 'user' | 'assistant'; text: string }[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .slice(-30)
+    .flatMap((m) => (m && typeof m === 'object' && ((m as { role?: unknown }).role === 'user' || (m as { role?: unknown }).role === 'assistant') && str((m as { text?: unknown }).text, 2000) ? [{ role: (m as { role: 'user' | 'assistant' }).role, text: str((m as { text: string }).text, 2000)! }] : []))
+}
+
+/** Контекст Twin из приложения: только нужные поля, с ограничениями размеров */
+export function cleanTwinContext(raw: unknown): TwinContext {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const wishlist = Array.isArray(r.wishlist)
+    ? r.wishlist.slice(0, 100).flatMap((w) => {
+        const x = (w && typeof w === 'object' ? w : {}) as Record<string, unknown>
+        const id = str(x.id, 80)
+        const name = str(x.name, 120)
+        return id && name ? [{ id, name, storeId: str(x.storeId, 40), price: typeof x.price === 'number' ? x.price : null, currency: str(x.currency, 3), onSale: x.onSale === true }] : []
+      })
+    : []
+  const favorites = Array.isArray(r.favorites) ? r.favorites.filter((f): f is string => typeof f === 'string').slice(0, 60) : []
+  return { closet: cleanCloset(r.closet), wishlist, style: cleanStyle(r.style), favorites, country: trendCountry(typeof r.country === 'string' ? r.country : undefined), who: whoOf(r.who) }
+}
+
+/** Вещи для образов: новые (из примерки) и из шкафа */
+export function cleanPieces(raw: unknown): LookPiece[] {
+  if (!Array.isArray(raw)) return []
+  return raw.slice(0, 120).flatMap((p) => {
+    const x = (p && typeof p === 'object' ? p : {}) as Record<string, unknown>
+    const id = str(x.id, 80)
+    const title = str(x.title, 80)
+    const kind = GARMENT_KINDS.find((k) => k === x.kind)
+    return id && title && kind ? [{ id, title, kind, color: str(x.color, 40), material: str(x.material, 60), isNew: x.isNew === true }] : []
+  })
 }

@@ -84,8 +84,26 @@ export interface Job {
   updatedAt: string
 }
 
-/** Откуда взять видео или фото для задачи; поиск вещи в магазине — без файла */
-export type JobInput = { uploadId: string } | { sample: SampleName } | { lookup: LookupQuery } | { shots: Shot[] }
+/** Вещь шкафа для сравнения «у тебя уже есть»: приложение шлёт свой шкаф вместе с задачей «новая вещь» */
+export interface ClosetRef {
+  id: string
+  title: string
+  kind: GarmentKind | null
+  color?: string | null
+}
+
+/** Примерка: фото человека и вещей — ссылки на этот сервер (/files/…) или ассеты сайта приложения, чужие не берём */
+export interface TryOnRequest {
+  person: string
+  garments: { label: string; url: string; fit?: string }[]
+  angle: Angle
+}
+
+/**
+ * Откуда взять видео или фото для задачи; поиск вещи в магазине — без файла, примерка — по ссылкам.
+ * closet и country — для новой вещи: с чем сравнить и в какой стране искать её в магазине
+ */
+export type JobInput = ({ uploadId: string } | { sample: SampleName } | { lookup: LookupQuery } | { shots: Shot[] } | { tryOn: TryOnRequest }) & { closet?: ClosetRef[]; country?: string }
 
 /**
  * Снимки умного скана: каждый уже снят в нужный момент (поза, резкость, свет) и подписан.
@@ -151,6 +169,22 @@ export interface JobResult {
   products?: ProductHit[]
   /** снимки умного скана после подготовки, в порядке ракурсов */
   shots?: { view: ShotView; url: string }[]
+  /** советы по скану себя от Muse Spark («отойди, чтобы ступни были в кадре») */
+  problems?: string[]
+  /** примерка: рендер на фото человека и оценка проверки Muse Spark (0–10) */
+  render?: { angle: Angle; url: string; score: number | null; issue: string | null }
+  /** что пошло не идеально, но задача доведена: «вещь не вырезалась — оставили фото» */
+  notes?: string[]
+}
+
+/** Что Twin предлагает сделать — кнопки в чате; сервер сам ничего не сохраняет и не примеряет */
+export type TwinAction = { type: 'try_on'; itemIds: string[]; title: string } | { type: 'wishlist'; url: string; title: string; price: number | null; currency: string | null }
+
+/** Ответ Twin: текст, кнопки и id ответа модели */
+export interface TwinReply {
+  text: string
+  actions: TwinAction[]
+  responseId: string
 }
 
 export interface Upload {

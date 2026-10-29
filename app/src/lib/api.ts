@@ -1,4 +1,4 @@
-import type { DeviceState, Job, JobKind, LookupQuery, PricePoint, SampleName, Shot, StoreSale, TrendDigest, Upload, WatchItem } from '@twin/shared';
+import type { ClosetRef, DeviceState, Job, JobKind, StyleProfile, TryOnRequest, TwinReply, LookupQuery, PricePoint, SampleName, Shot, StoreSale, TrendDigest, Upload, WatchItem } from '@twin/shared';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
@@ -57,8 +57,9 @@ export async function uploadBlob(blob: Blob, name: string): Promise<Upload> {
   return call('/uploads', { method: 'POST', body: form });
 }
 
-export function startJob(kind: JobKind, input: { uploadId: string } | { sample: SampleName } | { lookup: LookupQuery } | { shots: Shot[] }): Promise<Job> {
-  return call('/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind, ...input }) });
+/** extra — для новой вещи: шкаф для «у тебя уже есть» и страна для поиска в магазине */
+export function startJob(kind: JobKind, input: { uploadId: string } | { sample: SampleName } | { lookup: LookupQuery } | { shots: Shot[] } | { tryOn: TryOnRequest }, extra: { closet?: ClosetRef[]; country?: string } = {}): Promise<Job> {
+  return call('/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind, ...input, ...extra }) });
 }
 
 export function getJob(id: string): Promise<Job> {
@@ -115,6 +116,11 @@ export function getWatch(): Promise<WatchState> {
 
 export async function getPriceHistory(id: string): Promise<PricePoint[]> {
   return (await call<{ points: PricePoint[] }>(`/watch/${encodeURIComponent(id)}/history`)).points;
+}
+
+/** Twin на сервере (Muse Spark с инструментами): история чата и контекст — шкаф, вишлист, стиль, магазины */
+export function askTwin(messages: { role: 'user' | 'assistant'; text: string }[], context: { closet: ClosetRef[]; wishlist: { id: string; name: string; storeId: string | null; price: number | null; currency: string | null }[]; style: StyleProfile | null; favorites: string[]; country: string; who: string }): Promise<TwinReply> {
+  return call('/twin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ messages, context }) });
 }
 
 /** Тренды сезона для страны: с ключом — свежая выжимка Muse Spark за неделю, без ключа — curated */

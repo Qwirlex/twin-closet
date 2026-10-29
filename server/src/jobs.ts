@@ -7,17 +7,24 @@ import { keyframes, normalizeImage, normalizeVideo, probe } from './media'
 import { findProduct, runTask, storeLinks, text, type FoundProducts } from './models/spark'
 import type { MetaApi } from './meta'
 import type { Store } from './store'
+import { JobError } from './errors'
+import type { StepContext } from './pipeline/context'
+import { maskBody, pickBodyAngles } from './pipeline/body'
+import { cutCloset, detectCloset, tagCloset, trackCloset } from './pipeline/closet'
+import { cutItem, findOnline, readItem, similarItems } from './pipeline/item'
+import { checkRender, dress, protect } from './pipeline/tryon'
 
-export class JobError extends Error {
-  constructor(
-    readonly code: JobErrorCode,
-    message: string
-  ) {
-    super(message)
-  }
-}
+export { JobError }
 
 type StepDef = Omit<JobStep, 'status'>
+
+/** Шаги моделей по задачам (server/src/pipeline/*); поиск вещи в магазине — ниже, в modelStep */
+const PIPELINES: Partial<Record<JobKind, Record<string, (ctx: StepContext) => Promise<void>>>> = {
+  import_item: { read: readItem, cutout: cutItem, online: findOnline, similar: similarItems },
+  closet_scan: { detect: detectCloset, track: trackCloset, cutout: cutCloset, tag: tagCloset },
+  body_scan: { angles: pickBodyAngles, masks: maskBody },
+  try_on: { dress, protect, check: checkRender }
+}
 
 const STEPS: Record<JobKind, StepDef[]> = {
   closet_scan: [
@@ -36,8 +43,9 @@ const STEPS: Record<JobKind, StepDef[]> = {
   ],
   import_item: [
     { key: 'prepare', label: 'Preparing the photo', model: null },
-    { key: 'cutout', label: 'Cutting out the piece', model: 'SAM 3.1' },
+    // сначала Spark понимает, что это за вещь, — по её названию SAM и вырезает
     { key: 'read', label: 'Reading brand, price and size', model: 'Muse Spark' },
+    { key: 'cutout', label: 'Cutting out the piece', model: 'SAM 3.1' },
     { key: 'online', label: 'Finding it online', model: 'Muse Spark' },
     { key: 'similar', label: 'Checking what you already own', model: 'Muse Spark' }
   ],
@@ -71,12 +79,6 @@ const SAMPLE_EXT = ['.mp4', '.mov', '.jpg', '.jpeg', '.png', '.webp']
 
 export const STORE_NAMES: Record<string, string> = Object.fromEntries(LIVE_STORE_IDS.map((id) => [id, LIVE_STORES[id].name]))
 
-/** Общее между шагами одной задачи */
-interface StepContext {
-  input: JobInput
-  result: JobResult
-  scratch: Record<string, unknown>
-}
 
 interface Source {
   /** null — задача без файла (поиск вещи в магазине) */
@@ -94,7 +96,9 @@ export class Jobs {
     private readonly store: Store,
     private readonly meta: MetaApi,
     private readonly samplesDir: string,
-    private readonly log: (m: string) => void = console.log
+    private readonly log: (m: string) => void = console.log,
+    /** скачивание демо-фото с сайта приложения для примерки (в тестах — подмена) */
+    private readonly fetchImpl: typeof fetch = fetch
   ) {}
 
   /** Создаёт задачу и запускает её в фоне; ошибки входа (нет файла, нет готового видео) — сразу исключением */
@@ -155,6 +159,11 @@ export class Jobs {
       const u = this.store.upload(input.uploadId)
       if (!u) throw new JobError('bad_input', 'Upload not found. Try adding the file again.')
       return { path: this.store.path(basename(u.url)), sample: null, upload: basename(u.url) }
+    }
+    if ('tryOn' in input) {
+      const t = input.tryOn
+      if (!t || typeof t.person !== 'string' || !Array.isArray(t.garments) || !t.garments.length || t.garments.length > 4) throw new JobError('bad_input', 'Send a photo of the person and 1 to 4 pieces.')
+      return { path: null, sample: null }
     }
     const ext = SAMPLE_EXT.find((e) => existsSync(join(this.samplesDir, `${input.sample}${e}`)))
     if (!ext) throw new JobError('bad_input', 'The sample video is not on this server yet.')
@@ -219,7 +228,7 @@ export class Jobs {
         statuses.set('keyframes', 'done')
         result.keyframes = [`/files/${id}.jpg`]
       }
-      const ctx: StepContext = { input, result, scratch: {} }
+      const ctx: StepContext = { meta: this.meta, store: this.store, jobId: id, input, result, scratch: {}, fetchImpl: this.fetchImpl }
       for (const s of steps.filter((d) => d.model && statuses.get(d.key) !== 'done')) await step(s.key, () => this.modelStep(kind, s.key, ctx))
       sync({ status: 'done', progress: 'Done', percent: 1 })
     } catch (e) {
@@ -275,6 +284,8 @@ export class Jobs {
    * Остальное (SAM и примерка) собираем с ключом, когда увидим живые ответы (PLAN.md, дни 2–5)
    */
   private async modelStep(kind: JobKind, key: string, ctx: StepContext): Promise<void> {
+    const pipeline = PIPELINES[kind]?.[key]
+    if (pipeline) return pipeline(ctx)
     if (kind === 'product_lookup' && 'lookup' in ctx.input) {
       const q = ctx.input.lookup
       if (!isLiveStore(q.storeId)) throw new JobError('bad_input', 'Searching this store is coming soon.')

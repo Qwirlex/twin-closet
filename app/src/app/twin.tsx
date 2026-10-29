@@ -1,3 +1,4 @@
+import { storeOfUrl, type TwinAction } from '@twin/shared';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -8,12 +9,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '@/components/icons';
 import { Glass, GlassButton, GoldRim, Label, Orb, T, Tag } from '@/components/ui';
 import { LOOKS, type DemoLook, type Pic } from '@/data/demo';
+import { askTwin } from '@/lib/api';
+import { useShopping } from '@/lib/shopping';
 import { useStore } from '@/lib/store';
+import { wearOf } from '@/lib/trends';
 import { useTheme } from '@/theme/theme';
 import { FONT, PHOTO_BG, RECORD_RED } from '@/theme/tokens';
 
-// Twin — ИИ-стилист. Настоящие ответы даст Muse Spark с инструментами (шкаф, образы, примерка),
-// голос — Muse Voice Transcribe. Пока ключа Meta нет, отвечает заготовками на подсказки.
+// Twin — ИИ-стилист. С ключом на сервере отвечает Muse Spark с инструментами (POST /twin: шкаф, вишлист, стиль, тренды,
+// поиск в магазинах), «сохранить» и «примерить» приходят кнопками. Без ключа — заготовки на подсказки. Голос — Muse Voice Transcribe.
 
 interface Message {
   id: number;
@@ -21,6 +25,8 @@ interface Message {
   text?: string;
   image?: Pic;
   look?: string;
+  /** кнопки от Twin: сохранить найденную вещь, примерить образ */
+  actions?: TwinAction[];
 }
 
 const CHIPS = ['Dinner on Friday', 'Find it in Zara', 'Weekend plans', 'Evening out', 'How do I scan?'];
@@ -53,7 +59,9 @@ function replyTo(text: string): Message[] {
 export default function TwinScreen() {
   const { t } = useTheme();
   const insets = useSafeAreaInsets();
-  const { importAsset } = useStore();
+  const { importAsset, closet, style } = useStore();
+  const { serverHasKey, wishlist, favoriteIds, country, toggleWish, isWished } = useShopping();
+  const [thinking, setThinking] = useState(false);
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const nextId = useRef(1);
   const [messages, setMessages] = useState<Message[]>([{ id: 0, from: 'twin', text: 'Hi, I know your closet and the pieces you are eyeing. Tell me the plan and I will put an outfit together.' }]);
@@ -73,9 +81,31 @@ export default function TwinScreen() {
 
   const send = (text: string) => {
     const clean = text.trim();
-    if (!clean) return;
+    if (!clean || thinking) return;
     setDraft('');
-    push({ id: 0, from: 'me', text: clean }, ...replyTo(clean));
+    if (!serverHasKey) return push({ id: 0, from: 'me', text: clean }, ...replyTo(clean));
+    push({ id: 0, from: 'me', text: clean });
+    // история — только текст; вещи и стиль Twin берёт инструментами из контекста
+    const history = [...messages, { id: 0, from: 'me' as const, text: clean }].filter((m) => m.text).map((m) => ({ role: m.from === 'me' ? ('user' as const) : ('assistant' as const), text: m.text! }));
+    const context = {
+      closet: closet.filter((c) => !c.pending).map((c) => ({ id: c.id, title: `${c.name}${c.meta ? ` (${c.meta})` : ''}`.slice(0, 80), kind: c.kind, color: null })),
+      wishlist: wishlist.map((w) => ({ id: w.id, name: w.name, storeId: w.storeId, price: w.price, currency: w.currency })),
+      style,
+      favorites: favoriteIds,
+      country,
+      who: wearOf(),
+    };
+    setThinking(true);
+    askTwin(history.slice(1), context)
+      .then((r) => push({ id: 0, from: 'twin', text: r.text, actions: r.actions }))
+      .catch((e: unknown) => push({ id: 0, from: 'twin', text: e instanceof Error ? e.message : String(e) }))
+      .finally(() => setThinking(false));
+  };
+
+  const act = (a: TwinAction) => {
+    if (a.type === 'try_on') return router.push('/try');
+    const known = storeOfUrl(a.url);
+    toggleWish({ id: `twin-${a.url}`, name: a.title, meta: 'Found by Twin', kind: null, image: { uri: '' }, shop: { price: a.price, currency: a.currency, url: a.url, storeId: known?.storeId ?? null, ref: known?.productId ?? null } });
   };
 
   const another = (current: string) => {
@@ -116,7 +146,7 @@ export default function TwinScreen() {
       </View>
 
       <ScrollView ref={scroll} style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 10, paddingBottom: 12, gap: 14 }} onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: true })}>
-        <Label style={{ alignSelf: 'center', marginTop: 6 }}>Demo replies until the Meta key is connected</Label>
+        <Label style={{ alignSelf: 'center', marginTop: 6 }}>{serverHasKey ? 'Muse Spark · your closet, style and stores' : 'Demo replies until the Meta key is connected'}</Label>
         {messages.map((m) =>
           m.look ? (
             <LookCard key={m.id} look={LOOKS.find((l) => l.id === m.look)!} onAnother={() => another(m.look!)} />
@@ -125,11 +155,27 @@ export default function TwinScreen() {
               {m.image ? <Image source={m.image} contentFit="cover" style={{ width: 160, height: 200, borderRadius: 12 }} accessibilityLabel="Your photo" /> : <T lh={1.4}>{m.text}</T>}
             </View>
           ) : (
-            <T key={m.id} lh={1.5} style={{ maxWidth: 320 }}>
-              {m.text}
-            </T>
+            <View key={m.id} style={{ gap: 8, maxWidth: 320 }}>
+              <T lh={1.5}>{m.text}</T>
+              {m.actions?.map((a, i) => {
+                const saved = a.type === 'wishlist' && isWished(`twin-${a.url}`);
+                return (
+                  <Pressable key={i} onPress={() => act(a)} accessibilityRole="button" style={({ pressed }) => ({ alignSelf: 'flex-start', minHeight: 40, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1, borderColor: t.accent, flexDirection: 'row', alignItems: 'center', gap: 8, opacity: pressed ? 0.8 : 1 })}>
+                    <Icon name={a.type === 'try_on' ? 'tryOn' : 'heart'} size={16} color={t.accent} filled={saved} />
+                    <T size={13} w={500} color={t.accent}>
+                      {a.type === 'try_on' ? `Try it on · ${a.title}` : saved ? `Saved · ${a.title}` : `Save ${a.title}${a.price !== null ? ` · ${a.price} ${a.currency ?? ''}` : ''}`}
+                    </T>
+                  </Pressable>
+                );
+              })}
+            </View>
           )
         )}
+        {thinking ? (
+          <T size={13} color={t.muted} accessibilityLiveRegion="polite">
+            Twin is thinking…
+          </T>
+        ) : null}
       </ScrollView>
 
       <View style={{ paddingTop: 10, paddingBottom: insets.bottom + 16, gap: 10 }}>

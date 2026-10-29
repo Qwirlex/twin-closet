@@ -119,9 +119,13 @@ and on real photos: `npm run demo:compose -w @twin/server`.
 
 Built and tested now: everything above, uploads and jobs with steps, video to H.264 and key frames, try-on
 compositing, store search and sale checks on Muse Spark, demo limits, 48-hour cleanup.
-Waiting for the hackathon API key: the SAM 3.1, Muse Spark and Muse Image calls inside scans and try-ons
-(prompts and schemas are ready in `server/src/models/`). Until then the app says so at the step that needs the key,
-and the laptop guide shows "waiting for the hackathon API key".
+Every model step is wired and tested on a fake Meta API (`server/src/pipeline/`, `server/test/pipeline.test.ts`):
+a new piece (Spark reads it → SAM cuts it out → Spark finds it in the store → Spark compares with the closet),
+the closet video (Spark boxes → SAM video track with our object ids → best-frame cut-outs → Spark tags and merges
+duplicates), the body scan (Spark picks the angles → SAM masks person, face, hair, hands and clothes), the try-on
+(Muse Image → SAM masks on both → compositing → Spark check), Twin's tool loop (`POST /twin`) and outfits (`POST /looks`).
+What is left for the key: checking the live answer formats against these. Until then the app says so at the step that
+needs the key, and the laptop guide shows "waiting for the hackathon API key".
 
 ## Built during the hackathon
 

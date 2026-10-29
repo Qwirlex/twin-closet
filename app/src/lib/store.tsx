@@ -3,7 +3,7 @@ import type { ImagePickerAsset } from 'expo-image-picker';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { CLOSET, DEMO_BODY, LOOKS, OWN_LOOKS, SHOP, type DemoLook, type Item } from '@/data/demo';
-import { STORES } from '@/data/stores';
+import { deviceCountry, STORES } from '@/data/stores';
 import { fileUrl, getJob, startJob, uploadAsset, uploadBlob } from '@/lib/api';
 import type { CapturedShot } from '@/lib/live-camera';
 import { readSetting, writeSetting } from '@/lib/storage';
@@ -166,7 +166,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       for (;;) {
         const j = await getJob(jobId);
         if (j.status === 'done' && j.result.item) {
-          const ready = garmentToItem(j.result.item, via);
+          const ready = { ...garmentToItem(j.result.item, via), similar: j.result.similar?.map((s) => ({ id: s.garmentId, reason: s.reason })) };
           change((d) => ({ ...d, [list]: d[list].map((i) => (i.id === id ? ready : i)) }));
           return;
         }
@@ -198,6 +198,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const tryOn = [...SHOP.filter((i) => doc.data.tryOnDemo.includes(i.id)), ...doc.data.tryOnAdded, ...uploading];
     const all = [...closet, ...SHOP, ...tryOn];
     const item = (id: string) => all.find((i) => i.id === id);
+    // с чем сравнить новую вещь и где искать её в магазине (страна — из «Мои магазины»)
+    const importExtra = () => ({ closet: closet.filter((c) => !c.pending).map((c) => ({ id: c.id, title: `${c.name}${c.meta ? ` (${c.meta})` : ''}`.slice(0, 80), kind: c.kind, color: null })), country: readSetting('twin.country') ?? deviceCountry() });
 
     async function importAsset(asset: ImagePickerAsset, via: NonNullable<Item['via']>) {
       const id = `new-${Date.now()}`;
@@ -205,7 +207,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setUploading((list) => [...list, draft]);
       try {
         const upload = await uploadAsset(asset);
-        const job = await startJob('import_item', { uploadId: upload.id });
+        const job = await startJob('import_item', { uploadId: upload.id }, importExtra());
         // дальше — общая вещь: картинка с сервера, её видит и подключённое устройство
         const working: Item = { ...draft, image: { uri: fileUrl(upload.url) }, jobId: job.id, stage: 'working', meta: job.progress };
         setUploading((list) => list.filter((i) => i.id !== id));
@@ -218,7 +220,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     async function importShots(shots: CapturedShot[], to: 'closet' | 'store') {
       const uploads = await Promise.all(shots.map((s, i) => uploadBlob(s.blob, `${s.view}-${i}.jpg`)));
-      const job = await startJob('import_item', { shots: shots.map((s, i) => ({ uploadId: uploads[i].id, view: s.view })) });
+      const job = await startJob('import_item', { shots: shots.map((s, i) => ({ uploadId: uploads[i].id, view: s.view })) }, importExtra());
       const main = uploads[Math.max(0, shots.findIndex((s) => s.view === 'front'))];
       const via = to === 'store' ? 'Scanned in store' : undefined;
       const item: Item = { id: `new-${Date.now()}`, name: to === 'store' ? 'New in-store piece' : 'New piece', meta: job.progress, kind: null, image: { uri: fileUrl(main.url) }, via, pending: true, stage: 'working', jobId: job.id, ...(to === 'store' ? { shop: { price: null, url: null } } : { isNew: true }) };
@@ -241,7 +243,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return LOOKS.filter((l) => l.itemIds.some((id) => ready.has(id)));
       },
       look: (id) => [...LOOKS, ...OWN_LOOKS].find((l) => l.id === id),
-      similarOwned: (it) => (it.kind ? closet.filter((c) => c.kind === it.kind && c.id !== it.id) : []),
+      // ответ модели, если он есть; иначе — тот же вид вещи (демо-аккаунт и вещи до ключа)
+      similarOwned: (it) => (it.similar ? closet.filter((c) => it.similar!.some((s) => s.id === c.id)) : it.kind ? closet.filter((c) => c.kind === it.kind && c.id !== it.id) : []),
       addToTryOn: (it) =>
         change((d) =>
           SHOP.some((s) => s.id === it.id)

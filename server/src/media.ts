@@ -76,6 +76,12 @@ export async function normalizeImage(input: string, output: string): Promise<Med
   return probe(output)
 }
 
+/** Один кадр видео на секунде t → JPEG (лучший кадр вещи для вырезки) */
+export async function frameAt(video: string, t: number, out: string): Promise<string> {
+  await run('ffmpeg', ['-y', '-v', 'error', '-threads', threads(), '-ss', Math.max(0, t).toFixed(3), '-i', video, '-frames:v', '1', '-q:v', '2', out])
+  return out
+}
+
 /** count кадров равномерно по видео (без самых краёв, где обычно руки и тряска) */
 export async function keyframes(video: string, duration: number, count: number, outPattern: (i: number) => string): Promise<string[]> {
   const out: string[] = []

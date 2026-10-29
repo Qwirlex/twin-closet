@@ -133,5 +133,9 @@ API совместим с OpenAI SDK (`new OpenAI({ baseURL, apiKey })`) — б�
 - Подключено к задачам: поиск вещи в магазине (`product_lookup`) и ежедневная проверка распродажи.
 - Тесты `server/test/models.test.ts` — схемы, формат подсказок SAM, разбор, повторы, поиск в магазине с подставным API.
 
+- 29.10 (без ключа): все шаги задач подключены к моделям — `server/src/pipeline/` (item, closet, body, tryon, twin, looks),
+  проверены на подставном API `server/test/fake-meta.ts` (SAM — настоящий ответ из README парсера). Twin крутит цикл
+  `function_call` → `function_call_output` (до 6 раундов), «сохранить» и «примерить» возвращает приложению кнопками.
+
 С ключом проверить по живым ответам: формат рамок SAM в ответе, `tool_enablement`/`enable_*` у Muse Image,
 работает ли `n` в Responses, дают ли результаты веб-поиска цену.
