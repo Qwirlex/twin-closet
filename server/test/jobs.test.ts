@@ -64,7 +64,10 @@ describe('jobs without the Meta key', () => {
     // портрет остаётся портретом и ужимается до 1280 по длинной стороне
     expect(job.result.media).toMatchObject({ kind: 'video', width: 720, height: 1280 })
     expect(job.result.media?.duration).toBeGreaterThan(2.5)
-    expect(job.result.keyframes).toHaveLength(8)
+    // лучшие кадры: не больше 8, без повторов; у каждого — секунда в видео
+    expect(job.result.keyframes!.length).toBeGreaterThan(0)
+    expect(job.result.keyframes!.length).toBeLessThanOrEqual(8)
+    expect(job.result.keyframeTimes).toHaveLength(job.result.keyframes!.length)
     for (const url of job.result.keyframes!) expect(existsSync(store.path(url.split('/').pop()!))).toBe(true)
     expect((await app.request(job.result.keyframes![0])).headers.get('content-type')).toBe('image/jpeg')
   }, 60_000)
@@ -77,6 +80,29 @@ describe('jobs without the Meta key', () => {
     expect(job.steps[0].status).toBe('done')
     expect(job.result.media).toMatchObject({ kind: 'image', width: 800, height: 600 })
   }, 30_000)
+
+  it('a short video of a piece: up to 5 sharp frames, the sharpest is the main photo, then waits for the key', async () => {
+    const { app, store } = setup()
+    const u = await upload(app, video, 'video/quicktime')
+    const job = await finished(app, (await (await startJob(app, { kind: 'import_item', uploadId: u.id })).json()).id)
+    expect(job.steps.map((s) => s.key)).toEqual(['prepare', 'keyframes', 'read', 'cutout', 'online', 'similar'])
+    expect(job.steps.map((s) => s.status)).toEqual(['done', 'done', 'failed', 'pending', 'pending', 'pending'])
+    expect(job.errorCode).toBe('no_key')
+    expect(job.result.keyframes!.length).toBeGreaterThan(0)
+    expect(job.result.keyframes!.length).toBeLessThanOrEqual(5)
+    expect(job.result.keyframeTimes).toHaveLength(job.result.keyframes!.length)
+    // главное фото — по нему SAM вырежет вещь, его же приложение ставит на плитку
+    expect(existsSync(store.path(`${job.id}.jpg`))).toBe(true)
+  }, 60_000)
+
+  it('a piece video longer than 15 seconds gets a clear error', async () => {
+    const { app } = setup()
+    const long = join(dir, 'long.mp4')
+    execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=160x120:rate=10:duration=20', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', long])
+    const u = await upload(app, long, 'video/mp4')
+    const job = await finished(app, (await (await startJob(app, { kind: 'import_item', uploadId: u.id })).json()).id)
+    expect(job).toMatchObject({ status: 'failed', errorCode: 'bad_input', error: expect.stringMatching(/up to 15 seconds/) })
+  }, 60_000)
 
   it('one full-height photo is enough for a body scan (one angle)', async () => {
     const { app } = setup()

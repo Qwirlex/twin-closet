@@ -16,6 +16,11 @@ import { fakeMeta, pngBase64, SAM_H, SAM_W, samText, type FakeOptions } from './
 
 const dir = mkdtempSync(join(tmpdir(), 'twin-pipe-'))
 
+/** Видео, где каждый кадр резкий и не похож на соседний (шум) — лучших кадров ровно столько, сколько просили */
+function noisyVideo(path: string, seconds = 2): void {
+  execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', `nullsrc=size=${SAM_W}x${SAM_H}:rate=30:duration=${seconds},geq=random(1)*255:128:128`, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', path])
+}
+
 export function setup(opts: FakeOptions | null, fetchImpl?: typeof fetch) {
   const store = new Store(mkdtempSync(join(dir, 'data-')))
   const fake = opts ? fakeMeta(opts) : { meta: new MetaApi(''), calls: [] }
@@ -57,7 +62,7 @@ describe('a new piece from a screenshot', () => {
     const u = await upload(app, await photo('a.png'))
     const job = await run(jobs, app, { kind: 'import_item', uploadId: u.id, country: 'IE', closet: [{ id: 'blackjeans', title: 'Black jeans', kind: 'bottom', color: 'black' }, { id: 5 }] })
     expect(job.status).toBe('done')
-    expect(job.steps.map((s) => s.key)).toEqual(['prepare', 'read', 'cutout', 'online', 'similar'])
+    expect(job.steps.map((s) => s.key)).toEqual(['prepare', 'keyframes', 'read', 'cutout', 'online', 'similar'])
     const item = job.result.item!
     expect(item).toMatchObject({ kind: 'bottom', title: 'Wide-leg jeans with pleats', color: 'light blue', material: '100% cotton', source: 'screenshot' })
     expect(item.shop).toMatchObject({ brand: 'Zara', ref: '1234/567/800', sizes: 'M', url: 'https://www.zara.com/ie/en/wide-leg-jeans-p01234567.html', price: '35.95 EUR' })
@@ -132,7 +137,7 @@ describe('photos only from our own places', () => {
 describe('closet scan from a video', () => {
   it('Spark boxes → SAM track → best frame cut-outs → tags, duplicates merged', async () => {
     const video = join(dir, 'rail.mp4')
-    execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', `testsrc=size=${SAM_W}x${SAM_H}:rate=30:duration=2`, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', video])
+    noisyVideo(video)
     const { app, jobs, store, calls } = setup({
       spark: {
         closet_garments: { garments: [{ label: 'black hoodie', kind: 'top', frame: 1, box: { x_min: 600, y_min: 650, x_max: 860, y_max: 780 } }, { label: 'grey tee', kind: 'top', frame: 5, box: { x_min: 450, y_min: 650, x_max: 640, y_max: 780 } }] },
@@ -158,9 +163,11 @@ describe('closet scan from a video', () => {
     const sam = calls.find((c) => c.model === 'sam-3.1')!
     const prompt = JSON.stringify(sam.body)
     expect(prompt).toContain('"file_id":"file-')
-    // правая и нижняя граница в подсказке не включительно (как у официального сборщика): 275 → 274
-    expect(prompt).toContain('<6f>1<|box;x1=192;y1=217;x2=274;y2=260;w=320;h=334|>')
-    expect(prompt).toMatch(/<21f>2<\|box/)
+    // правая и нижняя граница в подсказке не включительно (как у официального сборщика): 275 → 274;
+    // кадр видео — секунда выбранного ключевого кадра × 15 к/с
+    const times = job.result.keyframeTimes!
+    expect(prompt).toContain(`<${Math.round(times[1] * 15)}f>1<|box;x1=192;y1=217;x2=274;y2=260;w=320;h=334|>`)
+    expect(prompt).toContain(`<${Math.round(times[5] * 15)}f>2<|box`)
   }, 60_000)
 })
 
@@ -187,7 +194,7 @@ describe('body scan masks', () => {
 
   it('video spin: Spark picks the angles and gives advice; nobody in the photo → clear error', async () => {
     const video = join(dir, 'spin.mp4')
-    execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', `testsrc=size=${SAM_W}x${SAM_H}:rate=30:duration=2`, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', video])
+    noisyVideo(video, 4)
     const form = () => {
       const f = new FormData()
       f.append('file', new File([readFileSync(video)], 'spin.mp4', { type: 'video/mp4' }))

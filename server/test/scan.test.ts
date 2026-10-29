@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bodyCue, bodyCueText, brightness, checkPose, FRAME, glare, itemCue, motion, poseShift, sharpness, type PosePoint } from '@twin/shared'
+import { bodyCue, bodyCueText, brightness, checkPose, FRAME, glare, itemCue, motion, pickFrames, poseShift, sharpness, type FrameScore, type PosePoint } from '@twin/shared'
 
 /** Человек лицом к камере: голова сверху, ступни внизу, руки чуть в стороны (доли кадра, сырой кадр без зеркала) */
 function standing(over: Partial<Record<number, Partial<PosePoint>>> = {}): PosePoint[] {
@@ -119,5 +119,34 @@ describe('item cue', () => {
     expect(itemCue({ ...good, move: 20 }, 'back')).toBe('still')
     expect(itemCue({ ...good, sharp: 80 }, 'front')).toBe('ok')
     expect(itemCue({ ...good, sharp: 80 }, 'tag')).toBe('blur')
+  })
+})
+
+describe('picking frames from a video', () => {
+  // превью 4×4: разный узор — разные кадры
+  const thumb = (v: number) => Array.from({ length: 16 }, (_, i) => (i * 37 + v * 53) % 256)
+  const f = (t: number, sharp: number, light = 120, look = t): FrameScore => ({ t, sharp, light, thumb: thumb(look) })
+
+  it('one sharp, distinct frame per stretch of the video, by time', () => {
+    const frames = [f(0, 20), f(0.25, 300), f(0.5, 280), f(0.75, 30), f(1, 310), f(1.25, 290)]
+    expect(pickFrames(frames, 3)).toEqual([1, 2, 4])
+  })
+
+  it('a blurred stretch gives no frame while the rest is sharp', () => {
+    // первая половина смазана (камеру дёрнули): кадры только из резкой, меньше count — не беда
+    const frames = [f(0, 25), f(0.5, 30), f(1, 20), f(1.5, 28), f(2, 300), f(2.5, 320), f(3, 310), f(3.5, 290)]
+    expect(pickFrames(frames, 4)).toEqual([5, 6])
+    // смазано всё — берём лучшее из того, что есть
+    expect(pickFrames([f(0, 25), f(1, 30), f(2, 20)], 3)).toEqual([0, 1, 2])
+  })
+
+  it('a blurred part is skipped while a sharp one exists; duplicates merge', () => {
+    // всё видео — одна и та же картинка: один кадр, самый резкий
+    const still = [f(0, 100, 120, 1), f(0.5, 200, 120, 1), f(1, 150, 120, 1), f(1.5, 120, 120, 1)]
+    expect(pickFrames(still, 4)).toEqual([1])
+    // тёмные кадры — только если других нет
+    expect(pickFrames([f(0, 500, 10), f(1, 100, 120)], 2)).toEqual([1])
+    expect(pickFrames([f(0, 500, 10), f(1, 100, 12)], 2)).toEqual([0, 1])
+    expect(pickFrames([], 3)).toEqual([])
   })
 })

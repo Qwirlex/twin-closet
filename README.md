@@ -119,8 +119,10 @@ and on real photos: `npm run demo:compose -w @twin/server`.
 
 ## Status
 
-Built and tested now: everything above, uploads and jobs with steps, video to H.264 and key frames, try-on
-compositing, store search and sale checks on Muse Spark, demo limits, 48-hour cleanup.
+Built and tested now: everything above, uploads and jobs with steps, video to H.264, try-on compositing, store search
+and sale checks on Muse Spark, demo limits, 48-hour cleanup. Videos are not cut evenly: the server keeps the sharpest
+distinct frames and drops blurred, dark and repeated ones before any model sees them, so a piece can be added as a
+short video too (up to 15 seconds: the front, a slow turn, the back).
 Every model step is wired and tested on a fake Meta API (`server/src/pipeline/`, `server/test/pipeline.test.ts`):
 a new piece (Spark reads it → SAM cuts it out → Spark finds it in the store → Spark compares with the closet),
 the closet video (Spark boxes → SAM video track with our object ids → best-frame cut-outs → Spark tags and merges

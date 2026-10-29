@@ -49,6 +49,55 @@ export function motion(a: ArrayLike<number>, b: ArrayLike<number>): number {
   return n ? sum / n : 0
 }
 
+// ── Лучшие кадры видео (docs/spec-smart-frames.md) ─────────────────────────────
+
+/** Оценка кадра видео: секунда, резкость, яркость и маленькое серое превью для поиска дублей */
+export interface FrameScore {
+  t: number
+  sharp: number
+  light: number
+  thumb: ArrayLike<number>
+}
+
+/** Темнее этого кадр берём, только если светлых нет */
+const MIN_LIGHT = 35
+/** Средняя разница превью меньше этого — тот же кадр (поворот человека на месте меняет треть кадра — его не склеиваем) */
+const SAME_FRAME = 3
+/** Резкость ниже этой доли от обычной резкой (75-й процентиль по видео) — смазанный кадр */
+const BLURRED = 0.25
+
+/**
+ * До count лучших кадров: видео делим на равные отрезки по времени, в каждом — самый резкий кадр, не похожий
+ * на уже выбранные; дубль резче выбранного — заменяет его. Отрезок без годного кадра (тёмный, смазанный, дубль)
+ * пропускаем. Номера — по времени
+ */
+export function pickFrames(frames: FrameScore[], count: number): number[] {
+  if (!frames.length || count < 1) return []
+  const lit = frames.map((_, i) => i).filter((i) => frames[i].light >= MIN_LIGHT)
+  const pool = lit.length ? lit : frames.map((_, i) => i)
+  const t0 = Math.min(...pool.map((i) => frames[i].t))
+  const span = Math.max(...pool.map((i) => frames[i].t)) - t0
+  // кадр с этим процентилем сам проходит порог — годные кадры есть всегда
+  const ranked = pool.map((i) => frames[i].sharp).sort((a, b) => a - b)
+  const minSharp = ranked[Math.floor((ranked.length - 1) * 0.75)] * BLURRED
+  const chosen: number[] = []
+  const dupOf = (i: number) => chosen.findIndex((j) => motion(frames[j].thumb, frames[i].thumb) < SAME_FRAME)
+  for (let s = 0; s < count; s++) {
+    const lo = t0 + (span * s) / count
+    const hi = t0 + (span * (s + 1)) / count
+    const inSeg = pool
+      .filter((i) => frames[i].sharp >= minSharp && frames[i].t >= lo && (s === count - 1 ? frames[i].t <= hi : frames[i].t < hi))
+      .sort((a, b) => frames[b].sharp - frames[a].sharp)
+    const fresh = inSeg.find((i) => dupOf(i) < 0)
+    if (fresh !== undefined) chosen.push(fresh)
+    else if (inSeg.length) {
+      const d = dupOf(inSeg[0])
+      if (d >= 0 && frames[inSeg[0]].sharp > frames[chosen[d]].sharp) chosen[d] = inSeg[0]
+    }
+  }
+  return chosen.sort((a, b) => frames[a].t - frames[b].t)
+}
+
 /** Блик: доля пересвеченных точек в середине кадра (бирка, глянцевая ткань) */
 export function glare(gray: ArrayLike<number>, w: number, h: number): number {
   let hot = 0

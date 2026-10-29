@@ -189,6 +189,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (following.current.has(jobId)) return;
     following.current.add(jobId);
     try {
+      let framed = false;
       for (;;) {
         const j = await getJob(jobId);
         if (j.status === 'done' && j.result.item) {
@@ -196,11 +197,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           change((d) => ({ ...d, [list]: d[list].map((i) => (i.id === id ? ready : i)) }));
           return;
         }
+        // ролик вещи: сервер выбрал кадры — на плитке самый резкий (он же главное фото задачи)
+        const frame: Partial<Item> = !framed && j.result.keyframeTimes?.length ? { image: { uri: fileUrl(`/files/${jobId}.jpg`) } } : {};
+        if (frame.image) framed = true;
         if (j.status === 'failed') {
-          patchAdded(id, j.errorCode === 'no_key' ? { stage: 'waiting', meta: WAITING_KEY } : { stage: 'failed', meta: j.error ?? 'Could not read this photo' });
+          patchAdded(id, { ...frame, ...(j.errorCode === 'no_key' ? { stage: 'waiting', meta: WAITING_KEY } : { stage: 'failed', meta: j.error ?? 'Could not read this photo' }) });
           return;
         }
-        patchAdded(id, { meta: `${j.progress}…` });
+        patchAdded(id, { ...frame, meta: `${j.progress}…` });
         await new Promise((r) => setTimeout(r, 1200));
       }
     } catch (e) {
@@ -231,13 +235,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     async function importAsset(asset: ImagePickerAsset, via: NonNullable<Item['via']>) {
       const id = `new-${Date.now()}`;
-      const draft: Item = { id, name: via === 'Screenshot' ? 'New screenshot' : 'New in-store photo', meta: 'Uploading…', kind: null, image: { uri: asset.uri }, via, pending: true, stage: 'uploading', shop: { price: null, url: null } };
+      // ролик картинкой не покажешь — плитка пустая, пока сервер не выберет кадр (follow)
+      const video = asset.type === 'video';
+      const draft: Item = { id, name: video ? 'New video' : via === 'Screenshot' ? 'New screenshot' : 'New in-store photo', meta: 'Uploading…', kind: null, image: { uri: video ? '' : asset.uri }, via, pending: true, stage: 'uploading', shop: { price: null, url: null } };
       setUploading((list) => [...list, draft]);
       try {
         const upload = await uploadAsset(asset);
         const job = await startJob('import_item', { uploadId: upload.id }, importExtra());
         // дальше — общая вещь: картинка с сервера, её видит и подключённое устройство
-        const working: Item = { ...draft, image: { uri: fileUrl(upload.url) }, jobId: job.id, stage: 'working', meta: job.progress };
+        const working: Item = { ...draft, image: video ? draft.image : { uri: fileUrl(upload.url) }, jobId: job.id, stage: 'working', meta: job.progress };
         setUploading((list) => list.filter((i) => i.id !== id));
         change((d) => ({ ...d, tryOnAdded: [...d.tryOnAdded.filter((i) => i.id !== id), working] }));
         void follow(id, job.id, via);

@@ -161,6 +161,8 @@ export interface JobResult {
   media?: MediaInfo
   /** ключевые кадры, которые увидит Muse Spark */
   keyframes?: string[]
+  /** секунды ключевых кадров в видео (лучшие кадры выбраны не по сетке) — на них SAM ставит подсказки */
+  keyframeTimes?: number[]
   garments?: Garment[]
   body?: BodyPhoto[]
   item?: Garment

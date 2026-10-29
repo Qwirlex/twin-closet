@@ -3,7 +3,7 @@
 import { copyFileSync, existsSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
 import { isLiveStore, isStorePage, LIVE_STORE_IDS, LIVE_STORES, SHOT_RULES, type Job, type JobErrorCode, type JobInput, type JobKind, type JobResult, type JobStep, type MediaInfo, type SampleName, type ShotView } from '@twin/shared'
-import { keyframes, normalizeImage, normalizeVideo, probe } from './media'
+import { normalizeImage, normalizeVideo, probe, smartKeyframes } from './media'
 import { findProduct, runTask, storeLinks, text, type FoundProducts } from './models/spark'
 import type { MetaApi } from './meta'
 import type { Store } from './store'
@@ -43,6 +43,8 @@ const STEPS: Record<JobKind, StepDef[]> = {
   ],
   import_item: [
     { key: 'prepare', label: 'Preparing the photo', model: null },
+    // вещь коротким роликом: лучшие кадры; у фото и скриншота шаг сразу готов
+    { key: 'keyframes', label: 'Picking the sharpest frames', model: null },
     // сначала Spark понимает, что это за вещь, — по её названию SAM и вырезает
     { key: 'read', label: 'Reading brand, price and size', model: 'Muse Spark' },
     { key: 'cutout', label: 'Cutting out the piece', model: 'SAM 3.1' },
@@ -73,7 +75,7 @@ function stepsFor(kind: JobKind, input: JobInput): StepDef[] {
 }
 
 /** Сколько ключевых кадров видит Muse Spark */
-const KEYFRAMES: Partial<Record<JobKind, number>> = { closet_scan: 8, body_scan: 12 }
+const KEYFRAMES: Partial<Record<JobKind, number>> = { closet_scan: 8, body_scan: 12, import_item: 5 }
 
 const SAMPLE_EXT = ['.mp4', '.mov', '.jpg', '.jpeg', '.png', '.webp']
 
@@ -221,8 +223,12 @@ export class Jobs {
       } else if (!media) {
         // поиск вещи в магазине: файла нет, сразу шаги моделей
       } else if (KEYFRAMES[kind] && media.kind === 'video' && media.duration) {
-        const frames = await step('keyframes', () => keyframes(this.store.path(`${id}.mp4`), media.duration!, KEYFRAMES[kind]!, (i) => this.store.path(`${id}-k${i}.jpg`)))
-        result.keyframes = frames.map((_, i) => `/files/${id}-k${i}.jpg`)
+        // лучшие кадры: резкие, без повторов, по всему проходу (docs/spec-smart-frames.md)
+        const frames = await step('keyframes', () => smartKeyframes(this.store.path(`${id}.mp4`), media, KEYFRAMES[kind]!, (i) => this.store.path(`${id}-k${i}.jpg`)))
+        result.keyframes = frames.paths.map((_, i) => `/files/${id}-k${i}.jpg`)
+        result.keyframeTimes = frames.times
+        // вещь роликом: самый резкий кадр — главное фото, по нему SAM вырезает вещь
+        if (kind === 'import_item') copyFileSync(frames.paths[frames.sharp.indexOf(Math.max(...frames.sharp))], this.store.path(`${id}.jpg`))
       } else if (KEYFRAMES[kind]) {
         // одно фото в полный рост вместо видео — один ракурс, кадры выбирать не из чего
         statuses.set('keyframes', 'done')
@@ -248,7 +254,7 @@ export class Jobs {
       throw new JobError('bad_input', 'This file is not a photo or a video we can read.')
     }
     if (info.kind === 'video') {
-      if (kind === 'import_item') throw new JobError('bad_input', 'Add a photo or a screenshot of the piece, not a video.')
+      if (kind === 'import_item' && (info.duration ?? 0) > 15) throw new JobError('bad_input', 'Film the piece for up to 15 seconds: the front, a slow turn, the back.')
       if ((info.duration ?? 0) > 120) throw new JobError('bad_input', 'The video is longer than two minutes. Film the rail in one slow pass of about 30 seconds.')
       return normalizeVideo(path, this.store.path(`${id}.mp4`), info)
     }

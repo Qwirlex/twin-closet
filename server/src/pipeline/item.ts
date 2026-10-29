@@ -11,7 +11,7 @@ import type { StepContext } from './context'
 /** Понятие для SAM, если по названию ничего не нашлось: одно существительное на вид вещи */
 const KIND_CONCEPT: Record<GarmentKind, string> = { top: 'top', bottom: 'trousers', dress: 'dress', outerwear: 'jacket', shoes: 'shoes', accessory: 'bag' }
 
-const VIEW_WORDS: Record<string, string> = { front: 'the piece from the front', back: 'the piece from the back', label: 'the care label', tag: 'the price tag' }
+const VIEW_WORDS: Record<string, string> = { front: 'the piece from the front', back: 'the piece from the back', label: 'the care label', tag: 'the price tag', video: 'a frame of a short video turning the piece' }
 
 /** Живой магазин по бренду с бирки («ZARA» → zara) */
 export function storeByBrand(brand: string | null): LiveStoreId | null {
@@ -34,9 +34,12 @@ export function shortTitle(r: TagReading): string {
 /** Шаг read: Muse Spark читает все снимки (перед, спина, ярлык, бирка) или один скриншот */
 export async function readItem(ctx: StepContext): Promise<void> {
   // умный скан — снимки по ракурсам (${job}-s<i>.jpg), иначе одно фото или скриншот (${job}.jpg)
+  const video = ctx.result.keyframeTimes?.length ? ctx.result.keyframeTimes : null
   const photos = ctx.result.shots
     ? ctx.result.shots.map((s, i) => ({ view: s.view, path: ctx.store.path(`${ctx.jobId}-s${i}.jpg`) }))
-    : [{ view: 'front', path: ctx.store.path(`${ctx.jobId}.jpg`) }]
+    : video
+      ? video.map((_, i) => ({ view: 'video', path: ctx.store.path(`${ctx.jobId}-k${i}.jpg`) }))
+      : [{ view: 'front', path: ctx.store.path(`${ctx.jobId}.jpg`) }]
   const parts: Part[] = []
   for (const [i, p] of photos.entries()) {
     parts.push(text(`Photo ${i + 1}: ${VIEW_WORDS[p.view] ?? 'the piece'}`))

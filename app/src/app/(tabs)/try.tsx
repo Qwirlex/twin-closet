@@ -42,11 +42,11 @@ export default function TryScreen() {
         if (e.dataTransfer?.types.includes('Files')) e.preventDefault();
       };
       const drop = (e: DragEvent) => {
-        const files = Array.from(e.dataTransfer?.files ?? []).filter((f) => f.type.startsWith('image/'));
+        const files = Array.from(e.dataTransfer?.files ?? []).filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'));
         if (!files.length) return;
         e.preventDefault();
         for (const file of files.slice(0, 3)) {
-          importAsset({ uri: URL.createObjectURL(file), file, mimeType: file.type, fileName: file.name, type: 'image', width: 0, height: 0 } as ImagePicker.ImagePickerAsset, 'Screenshot');
+          importAsset({ uri: URL.createObjectURL(file), file, mimeType: file.type, fileName: file.name, type: file.type.startsWith('video/') ? 'video' : 'image', width: 0, height: 0 } as ImagePicker.ImagePickerAsset, 'Screenshot');
         }
       };
       window.addEventListener('dragover', over);
@@ -76,7 +76,8 @@ export default function TryScreen() {
         return;
       }
     }
-    const res = via === 'Screenshot' ? await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9 }) : await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.9 });
+    // из галереи — скриншот или короткий ролик вещи (до 15 с: перед, поворот, спина)
+    const res = via === 'Screenshot' ? await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], videoMaxDuration: 15, quality: 0.9 }) : await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.9 });
     if (res.canceled || !res.assets[0]) return;
     importAsset(res.assets[0], via);
   }
@@ -166,7 +167,7 @@ export default function TryScreen() {
         </T>
       ) : isDesktopWeb() ? (
         <T size={13} color={t.muted} lh={1.4}>
-          On a computer, drop a screenshot anywhere on this page.
+          On a computer, drop a screenshot or a short video anywhere on this page.
         </T>
       ) : null}
 

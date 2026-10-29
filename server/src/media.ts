@@ -1,7 +1,7 @@
 // Видео и фото через ffmpeg: приводим к виду, который принимают модели Meta, и режем ключевые кадры
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
-import type { MediaInfo } from '@twin/shared'
+import { brightness, pickFrames, sharpness, type FrameScore, type MediaInfo } from '@twin/shared'
 
 const run = promisify(execFile)
 
@@ -92,4 +92,42 @@ export async function keyframes(video: string, duration: number, count: number, 
     out.push(file)
   }
   return out
+}
+
+/** Серые превью видео: 4 кадра в секунду, 240 px по ширине (так же меряет резкость телефон) — прямо из ffmpeg, без файлов */
+export async function grayThumbs(video: string, info: MediaInfo, fps = 4, width = 240): Promise<{ t: number; gray: Uint8Array; w: number; h: number }[]> {
+  const w = width
+  const h = Math.max(2, Math.round((w * info.height) / Math.max(1, info.width) / 2) * 2)
+  const data = await oneAtATime(
+    () =>
+      new Promise<Buffer>((resolve, reject) => {
+        const p = spawn('ffmpeg', ['-v', 'error', '-threads', threads(), '-i', video, '-vf', `fps=${fps},scale=${w}:${h},format=gray`, '-f', 'rawvideo', 'pipe:1'])
+        const chunks: Buffer[] = []
+        p.stdout.on('data', (c: Buffer) => chunks.push(c))
+        p.on('error', reject)
+        p.on('close', (code) => (code === 0 ? resolve(Buffer.concat(chunks)) : reject(new Error(`ffmpeg exited with ${code}`))))
+      })
+  )
+  const size = w * h
+  const out: { t: number; gray: Uint8Array; w: number; h: number }[] = []
+  for (let i = 0; (i + 1) * size <= data.length; i++) out.push({ t: i / fps, gray: new Uint8Array(data.buffer, data.byteOffset + i * size, size), w, h })
+  return out
+}
+
+/**
+ * До count лучших кадров видео (docs/spec-smart-frames.md): резкие, не повторяются, по всему проходу.
+ * Возвращает файлы в полном размере, их секунды и резкость
+ */
+export async function smartKeyframes(video: string, info: MediaInfo, count: number, outPattern: (i: number) => string): Promise<{ paths: string[]; times: number[]; sharp: number[] }> {
+  const thumbs = await grayThumbs(video, info)
+  const scores: FrameScore[] = thumbs.map((f) => ({ t: f.t, sharp: sharpness(f.gray, f.w, f.h), light: brightness(f.gray), thumb: f.gray }))
+  const picks = pickFrames(scores, count)
+  if (!picks.length) {
+    // ffmpeg не отдал превью (очень короткое видео) — по старинке, равномерно
+    const paths = await keyframes(video, info.duration ?? 0, count, outPattern)
+    return { paths, times: paths.map((_, i) => (info.duration ?? 0) * ((i + 0.5) / count)), sharp: paths.map(() => 0) }
+  }
+  const paths: string[] = []
+  for (const [k, i] of picks.entries()) paths.push(await frameAt(video, scores[i].t, outPattern(k)))
+  return { paths, times: picks.map((i) => scores[i].t), sharp: picks.map((i) => scores[i].sharp) }
 }

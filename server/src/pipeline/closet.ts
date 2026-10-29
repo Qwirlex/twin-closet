@@ -56,7 +56,7 @@ export async function trackCloset(ctx: StepContext): Promise<void> {
   for (let g = 0; g < tracked.length; g += GROUP) {
     const group = tracked.slice(g, g + GROUP)
     const prompt = objectPrompt(
-      group.map((t) => ({ id: t.id, box: boxToPixels(t.detected.box, media.width, media.height), frame: Math.round(keyframeTime(t.detected.frame, media.duration!) * fps) })),
+      group.map((t) => ({ id: t.id, box: boxToPixels(t.detected.box, media.width, media.height), frame: Math.round((ctx.result.keyframeTimes?.[t.detected.frame] ?? keyframeTime(t.detected.frame, media.duration!)) * fps) })),
       media.width,
       media.height
     )
