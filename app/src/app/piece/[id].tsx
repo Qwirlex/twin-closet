@@ -2,7 +2,7 @@ import { cmToIn, garmentFitFromTape, TAPE_LIMITS, TAPE_ZONES, type FitCut, type 
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, Switch, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Switch, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/icons';
@@ -24,6 +24,9 @@ const CUTS: { id: FitCut; name: string }[] = [
   { id: 'wide', name: 'Wide' },
   { id: 'oversize', name: 'Oversize' },
 ];
+
+/** Ручка переключателя светлая в обоих положениях; в браузере включённая ручка иначе бирюзовая (цвет react-native-web) */
+const thumb = (color: string) => ({ thumbColor: color, ...(Platform.OS === 'web' ? ({ activeThumbColor: color } as object) : {}) });
 
 /** Замер плашмя в см → число на экране (дюймы — до половинки) */
 const shown = (cm: number | undefined, units: Units): string => (cm == null || !Number.isFinite(cm) ? '' : String(units === 'in' ? cmToIn(cm) : Math.round(cm * 2) / 2));
@@ -129,7 +132,7 @@ export default function PieceScreen() {
                 New {piece.kind === 'bottom' ? 'trousers and jeans' : 'pieces of this kind'} are compared with it
               </T>
             </View>
-            <Switch value={!!piece.favorite} onValueChange={(on) => setFavorite(piece.id, piece.kind!, on)} trackColor={{ true: t.accent, false: t.line }} accessibilityLabel="Fits me perfectly" />
+            <Switch value={!!piece.favorite} onValueChange={(on) => setFavorite(piece.id, piece.kind!, on)} trackColor={{ true: t.accent, false: t.line }} {...thumb(t.text)} accessibilityLabel="Fits me perfectly" />
           </View>
 
           <View style={{ gap: 6 }}>
@@ -190,7 +193,7 @@ export default function PieceScreen() {
               <T size={15} style={{ flex: 1 }}>
                 Stretchy fabric
               </T>
-              <Switch value={stretch} onValueChange={setStretch} trackColor={{ true: t.accent, false: t.line }} accessibilityLabel="Stretchy fabric" />
+              <Switch value={stretch} onValueChange={setStretch} trackColor={{ true: t.accent, false: t.line }} {...thumb(t.text)} accessibilityLabel="Stretchy fabric" />
             </View>
           </View>
 

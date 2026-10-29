@@ -12,3 +12,8 @@ demo/footage/
 demo/voice.*
 dist-web/
 deploy/
+demo/node_modules/
+demo/out/
+demo/public/footage/
+demo/public/voice/
+demo/public/manifest.json
