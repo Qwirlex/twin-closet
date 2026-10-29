@@ -161,6 +161,14 @@ export function FitSheet({ pieces, showSize }: { pieces: FitPiece[]; showSize: b
             {r.vsFavorite}
           </T>
         </View>
+      ) : piece.item.kind === 'bottom' || piece.item.kind === 'top' || piece.item.kind === 'outerwear' || piece.item.kind === 'dress' ? (
+        // сравнить не с чем — предложим замерить свою вещь, которая сидит идеально
+        <Pressable onPress={() => router.push('/')} accessibilityRole="button" style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Icon name="heart" size={18} color={t.accent} />
+          <T size={13} color={t.accent} style={{ flex: 1 }}>
+            {`Measure ${piece.item.kind === 'bottom' ? 'a pair' : 'a piece'} that fits you perfectly — open it in your closet`}
+          </T>
+        </Pressable>
       ) : null}
 
       {r.zones.length ? (

@@ -173,9 +173,9 @@ export default function ClosetScreen() {
 
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
             {items.map((it) => (
-              <View key={it.id} style={{ width: tileW }}>
+              <Pressable key={it.id} onPress={() => router.push({ pathname: '/piece/[id]', params: { id: it.id } })} accessibilityRole="button" accessibilityLabel={`${it.name}: fit and measurements`} style={({ pressed }) => ({ width: tileW, opacity: pressed ? 0.85 : 1 })}>
                 <GarmentTile item={it} />
-              </View>
+              </Pressable>
             ))}
             {items.length === 0 ? (
               <T size={14} color={t.muted}>

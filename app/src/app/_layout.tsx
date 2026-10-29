@@ -45,6 +45,7 @@ function Root() {
         <Stack.Screen name="style" options={{ animation: 'fade' }} />
         <Stack.Screen name="scan" options={{ presentation: 'fullScreenModal', contentStyle: { backgroundColor: '#1A1A1C' } }} />
         <Stack.Screen name="result" />
+        <Stack.Screen name="piece/[id]" />
         <Stack.Screen name="twin" />
         <Stack.Screen name="stores" />
         <Stack.Screen name="connect" />

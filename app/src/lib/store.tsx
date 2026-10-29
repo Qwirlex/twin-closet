@@ -1,4 +1,4 @@
-import { cleanBody, cleanStyle, fitReport, LIVE_STORES, storeOfUrl, type BodyMeasurements, type FitReport, type Garment, type StyleProfile } from '@twin/shared';
+import { cleanBody, cleanStyle, FIT_ZONES, fitReport, GARMENT_KINDS, LIVE_STORES, storeOfUrl, type BodyMeasurements, type FitCut, type FitReport, type Garment, type GarmentFit, type GarmentKind, type StyleProfile } from '@twin/shared';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
@@ -60,6 +60,10 @@ interface Store {
   /** профиль стиля из опроса; null — опрос пропущен или стёрт */
   style: StyleProfile | null;
   setStyle: (style: StyleProfile | null) => void;
+  /** свои замеры вещи сантиметром (docs/spec-favorite-piece.md); null — стереть */
+  setPieceFit: (id: string, fit: GarmentFit | null) => void;
+  /** «сидит идеально»: одна любимая вещь на вид, новые вещи этого вида сравниваются с ней */
+  setFavorite: (id: string, kind: GarmentKind, on: boolean) => void;
 }
 
 /** Что синхронизируется: только своё. Демо-вещи берутся из приложения — их картинки на другом устройстве не откроются */
@@ -73,6 +77,10 @@ interface ClosetDoc {
   body: BodyMeasurements | null;
   showSize: boolean;
   style: StyleProfile | null;
+  /** замеры сантиметром — и у своих, и у демо-вещей */
+  measured: Record<string, GarmentFit>;
+  /** любимая вещь на вид; вида нет — как в демо */
+  favoriteByKind: Partial<Record<GarmentKind, string>>;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -82,7 +90,7 @@ const KNOWN_SCANS = 'twin.knownScans';
 const WAITING_KEY = 'Cut-out and tags come once the Meta key is connected';
 
 // у демо-аккаунта параметры уже заполнены: посадка видна сразу
-const freshDoc = (): ClosetDoc => ({ closetAdded: [], tryOnAdded: [], tryOnDemo: SHOP.map((i) => i.id), savedIds: LOOKS.map((l) => l.id), scans: [], body: DEMO_BODY, showSize: false, style: null });
+const freshDoc = (): ClosetDoc => ({ closetAdded: [], tryOnAdded: [], tryOnDemo: SHOP.map((i) => i.id), savedIds: LOOKS.map((l) => l.id), scans: [], body: DEMO_BODY, showSize: false, style: null, measured: {}, favoriteByKind: {} });
 
 const isStr = (v: unknown): v is string => typeof v === 'string';
 
@@ -110,7 +118,25 @@ function readDoc(raw: unknown): ClosetDoc | null {
     body: d.body === undefined ? fresh.body : cleanBody(d.body),
     showSize: d.showSize === true,
     style: cleanStyle(d.style),
+    measured: cleanMeasured(d.measured),
+    favoriteByKind: Object.fromEntries(Object.entries(d.favoriteByKind && typeof d.favoriteByKind === 'object' ? d.favoriteByKind : {}).filter(([k, v]) => (GARMENT_KINDS as readonly string[]).includes(k) && isStr(v))),
   };
+}
+
+const CUTS: FitCut[] = ['slim', 'regular', 'relaxed', 'wide', 'oversize'];
+
+/** Свои замеры из памяти или с другого устройства: только известные зоны и числа */
+function cleanMeasured(raw: unknown): Record<string, GarmentFit> {
+  if (!raw || typeof raw !== 'object') return {};
+  const out: Record<string, GarmentFit> = {};
+  for (const [id, v] of Object.entries(raw as Record<string, unknown>)) {
+    const g = v as Partial<GarmentFit> | null;
+    const zones = g?.sizes?.[0]?.zones;
+    if (!g || !CUTS.includes(g.cut as FitCut) || !zones || typeof zones !== 'object') continue;
+    const clean = Object.fromEntries(Object.entries(zones).filter(([z, n]) => (FIT_ZONES as readonly string[]).includes(z) && typeof n === 'number' && n > 0 && n < 250));
+    if (Object.keys(clean).length) out[id] = { cut: g.cut as FitCut, stretch: g.stretch === true, size: 'Yours', source: 'tape', sizes: [{ size: 'Yours', zones: clean }] };
+  }
+  return out;
 }
 
 /** Ссылка на товар: живой магазин и номер товара узнаём сразу; страницу прочитает Muse Spark (веб-поиск), пока ждёт ключ */
@@ -194,7 +220,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => writeSetting(KNOWN_SCANS, JSON.stringify(knownScans.slice(-30))), [knownScans]);
 
   const value = useMemo<Store>(() => {
-    const closet = [...doc.data.closetAdded, ...CLOSET];
+    // свои замеры и выбор любимой вещи поверх демо и своих вещей
+    const favorites = doc.data.favoriteByKind;
+    const closet = [...doc.data.closetAdded, ...CLOSET].map((c) => ({ ...c, fit: doc.data.measured[c.id] ?? c.fit, favorite: c.kind && favorites[c.kind] !== undefined ? favorites[c.kind] === c.id : c.favorite }));
     const tryOn = [...SHOP.filter((i) => doc.data.tryOnDemo.includes(i.id)), ...doc.data.tryOnAdded, ...uploading];
     const all = [...closet, ...SHOP, ...tryOn];
     const item = (id: string) => all.find((i) => i.id === id);
@@ -279,6 +307,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       style: doc.data.style,
       setStyle: (style) => change((d) => ({ ...d, style })),
+      setPieceFit: (id, fit) =>
+        change((d) => {
+          const { [id]: _old, ...rest } = d.measured;
+          return { ...d, measured: fit ? { ...rest, [id]: fit } : rest };
+        }),
+      // отметил другую — прежняя перестала быть любимой; снял отметку — у вида любимой нет вовсе (даже демо)
+      setFavorite: (id, kind, on) => change((d) => ({ ...d, favoriteByKind: { ...d.favoriteByKind, [kind]: on ? id : '' } })),
     };
     // change и follow стабильны по смыслу; пересчитываем, когда меняются данные
     // eslint-disable-next-line react-hooks/exhaustive-deps

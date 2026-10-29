@@ -255,6 +255,47 @@ export function fitReport(kind: GarmentKind | null, fit: GarmentFit, o: FitOptio
   }
 }
 
+// ── Любимая вещь, замер сантиметром (docs/spec-favorite-piece.md) ─────────────────
+
+export interface TapeZone {
+  zone: FitZone
+  label: string
+  hint: string
+  /** мерим плашмя поперёк — обхват вдвое больше; длина по шву — как есть */
+  flat: boolean
+}
+
+const TAPE: Record<FitZone, TapeZone> = {
+  chest: { zone: 'chest', label: 'Chest, flat', hint: 'Armpit to armpit, straight across the front.', flat: true },
+  waist: { zone: 'waist', label: 'Waist, flat', hint: 'Along the top of the waistband, buttoned.', flat: true },
+  hips: { zone: 'hips', label: 'Hips, flat', hint: 'Straight across at the widest point, about 18 cm below the waistband.', flat: true },
+  thigh: { zone: 'thigh', label: 'Thigh, flat', hint: 'Across one leg, 2–3 cm below the crotch seam.', flat: true },
+  inseam: { zone: 'inseam', label: 'Inside leg', hint: 'From the crotch seam to the hem, along the inside.', flat: false }
+}
+
+/** Что мерить у вещи этого вида, разложив её на полу */
+export function TAPE_ZONES(kind: GarmentKind | null): TapeZone[] {
+  return zonesFor(kind).map((z) => TAPE[z])
+}
+
+/** Разумные замеры плашмя, см (длина по шву — сама длина) */
+export const TAPE_LIMITS: Record<FitZone, [number, number]> = { chest: [35, 90], waist: [25, 80], hips: [30, 90], thigh: [15, 50], inseam: [50, 100] }
+
+/** Замеры плашмя → замеры вещи, как в таблице размеров: поперёк × 2 = обхват. Вне пределов — ошибка, вещь не сохраняем */
+export function garmentFitFromTape(kind: GarmentKind | null, flat: Partial<Record<FitZone, number>>, cut: FitCut, stretch: boolean): { fit: GarmentFit | null; errors: FitZone[] } {
+  const zones: Partial<Record<FitZone, number>> = {}
+  const errors: FitZone[] = []
+  for (const t of TAPE_ZONES(kind)) {
+    const v = flat[t.zone]
+    if (v == null) continue
+    const [lo, hi] = TAPE_LIMITS[t.zone]
+    if (!Number.isFinite(v) || v < lo || v > hi) errors.push(t.zone)
+    else zones[t.zone] = Math.round((t.flat ? v * 2 : v) * 2) / 2
+  }
+  if (errors.length || !Object.keys(zones).length) return { fit: null, errors }
+  return { fit: { cut, stretch, size: 'Yours', source: 'tape', sizes: [{ size: 'Yours', zones }] }, errors: [] }
+}
+
 /** Посадка словами для промпта примерки: Muse Image рисует вещь так, как она сядет */
 export function fitPrompt(report: FitReport): string {
   return report.zones

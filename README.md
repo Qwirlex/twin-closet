@@ -101,6 +101,8 @@ and on real photos: `npm run demo:compose -w @twin/server`.
 - **Fit by zones, never one size label** — room at chest, waist, hips, length and leg for each piece, a verdict
   ("fits, with one catch"), the size that fixes it, and a comparison with a favourite piece you own
   (`packages/shared/src/fit.ts`). Coloured labels sit on the try-on. Sizes S/M/L appear only if you turn them on.
+  Tap any piece in the closet to mark it "fits me perfectly" and measure it flat with a tape — new pieces of that
+  kind are compared with it.
 - **Measurements, optional** — height alone is enough; the rest sharpens the fit. Private, deleted from Me.
 - **Style quiz** — 61 styles in 13 families, from everyday casual and smart casual to old money, poetcore, gorpcore and Y3K, men's and women's looks;
   a profile of 1–3 styles with weights, colours and what to leave out goes into outfits and Twin

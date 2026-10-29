@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanBody, cmToIn, fitReport, inToCm, zoneFit, type BodyMeasurements, type GarmentFit } from '@twin/shared'
+import { cleanBody, cmToIn, fitReport, garmentFitFromTape, inToCm, TAPE_ZONES, zoneFit, type BodyMeasurements, type GarmentFit } from '@twin/shared'
 import { tryOnPrompt } from '../src/models/image'
 
 const BODY: BodyMeasurements = { heightCm: 183, weightKg: 74, chestCm: 98, waistCm: 80, hipsCm: 96, inseamCm: 84, shoeEu: 43 }
@@ -115,5 +115,30 @@ describe('try-on prompt', () => {
   it('passes the fit of each garment to Muse Image', () => {
     const text = tryOnPrompt([{ label: 'wide-leg jeans', image: { type: 'input_image', image_url: 'x' } as never, fit: 'tight at the waist; light break at the shoe' }], 'front')
     expect(text).toContain('garment 1 sits tight at the waist; light break at the shoe')
+  })
+})
+
+describe('favorite piece measured flat with a tape', () => {
+  it('doubles flat widths into circumferences, keeps the inside leg', () => {
+    const { fit, errors } = garmentFitFromTape('bottom', { waist: 41, hips: 49, thigh: 30, inseam: 83 }, 'regular', false)
+    expect(errors).toEqual([])
+    expect(fit).toEqual({ cut: 'regular', stretch: false, size: 'Yours', source: 'tape', sizes: [{ size: 'Yours', zones: { waist: 82, hips: 98, thigh: 60, inseam: 83 } }] })
+  })
+
+  it('refuses numbers out of range and empty forms', () => {
+    expect(garmentFitFromTape('bottom', { waist: 10, hips: 49 }, 'regular', false)).toEqual({ fit: null, errors: ['waist'] })
+    expect(garmentFitFromTape('bottom', {}, 'regular', false)).toEqual({ fit: null, errors: [] })
+    // у верха меряем только грудь; лишнее не берём
+    const top = garmentFitFromTape('outerwear', { chest: 56, waist: 40 }, 'relaxed', true)
+    expect(top.fit!.sizes[0].zones).toEqual({ chest: 112 })
+    expect(top.fit!.stretch).toBe(true)
+    expect(TAPE_ZONES('shoes')).toEqual([])
+    expect(TAPE_ZONES('bottom').map((z) => z.zone)).toEqual(['waist', 'hips', 'thigh', 'inseam'])
+  })
+
+  it('new jeans are compared with the measured favorite', () => {
+    const { fit } = garmentFitFromTape('bottom', { waist: 41, hips: 49, thigh: 30, inseam: 83 }, 'regular', false)
+    const r = fitReport('bottom', WIDE, { body: BODY, showSize: false, favorite: { name: 'black jeans', fit: fit! } })
+    expect(r.vsFavorite).toBe('Next to your black jeans: 3 cm tighter in the waist, 6 cm roomier in the hips.')
   })
 })
