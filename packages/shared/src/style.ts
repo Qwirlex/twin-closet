@@ -2,10 +2,11 @@
 // Модель не дообучаем: Spark получает справочник и применяет его к фото и шкафу.
 // Список — живые нишевые стили и тренды 2026 (Pinterest Predicts 2026: poetcore, glamoratti, khaki coded, extra celestial)
 
-export const STYLE_FAMILIES = ['classic', 'academia', 'minimal', 'tokyo', 'work', 'street', 'dark', 'future', 'soft', 'sport', 'retro', 'glam'] as const
+export const STYLE_FAMILIES = ['casual', 'classic', 'academia', 'minimal', 'tokyo', 'work', 'street', 'dark', 'future', 'soft', 'sport', 'retro', 'glam'] as const
 export type StyleFamily = (typeof STYLE_FAMILIES)[number]
 
 export const FAMILY_NAME: Record<StyleFamily, string> = {
+  casual: 'Everyday & casual',
   classic: 'Classic & tailored',
   academia: 'Academia',
   minimal: 'Minimal',
@@ -39,6 +40,10 @@ export interface StyleGuide {
 type Row = [name: string, family: StyleFamily, who: StyleFor, line: string, silhouette: string, pieces: string[], fabrics: string[], colors: string[]]
 
 const ROWS = {
+  // ── Everyday & casual (просьба пользователя 29.10: обычный casual — самый частый стиль)
+  casual: ['Casual', 'casual', 'all', 'Easy everyday: good jeans, a soft sweatshirt, clean sneakers', 'relaxed but fitted, nothing tight or baggy', ['crew-neck sweatshirt', 'heavy tee', 'straight or relaxed jeans', 'overshirt or denim jacket', 'clean sneakers'], ['cotton jersey', 'denim', 'brushed cotton'], ['navy', 'grey', 'white', 'olive', 'light blue']],
+  smart_casual: ['Smart casual', 'casual', 'all', 'Chinos, a knit polo or shirt, a blazer worn with sneakers', 'tidy and relaxed, a jacket without a tie', ['unstructured blazer', 'knit polo or oxford shirt', 'chinos', 'fine merino knit', 'leather sneakers or loafers'], ['cotton twill', 'merino', 'oxford cloth', 'suede'], ['navy', 'stone', 'white', 'brown', 'olive']],
+  normcore: ['Normcore', 'casual', 'all', 'Plain on purpose: fleece, straight jeans, dad sneakers', 'regular, nothing tailored', ['plain tee', 'fleece', 'straight jeans', 'dad sneakers', 'cap'], ['cotton', 'fleece', 'denim'], ['grey', 'navy', 'white', 'light wash']],
   // ── Classic & tailored
   old_money: ['Old money', 'classic', 'all', 'Quiet luxury: cashmere, pressed trousers, loafers, no logos', 'relaxed tailoring, fine knit over a collar, trousers with a crease', ['cable or fine-gauge knit', 'oxford shirt', 'pleated wool trousers', 'camel coat', 'suede loafers'], ['cashmere', 'merino', 'wool', 'suede'], ['cream', 'camel', 'taupe', 'navy']],
   ivy_prep: ['Ivy & preppy', 'classic', 'all', 'Button-downs, chinos, cable knits, penny loafers', 'trim collegiate layers', ['oxford button-down', 'cable-knit sweater vest', 'navy blazer', 'chinos', 'penny loafers'], ['oxford cloth', 'cotton twill', 'lambswool'], ['navy', 'white', 'burgundy', 'khaki']],
@@ -55,7 +60,6 @@ const ROWS = {
   japanese_minimal: ['Japanese minimal', 'minimal', 'all', 'Loose layers, natural fabrics, soft drape', 'roomy layers that hang, long over wide', ['collarless shirt', 'long overshirt', 'wide trousers', 'knit vest', 'simple leather shoes'], ['cotton', 'linen', 'wool'], ['ecru', 'ink', 'khaki', 'grey']],
   nineties_minimal: ['’90s minimal', 'minimal', 'all', 'White tanks, slim black trousers, slip dresses, long coats', 'narrow and sharp', ['white tank', 'slim black trousers', 'slip dress', 'long coat', 'square-toe boots'], ['crepe', 'satin', 'wool'], ['black', 'white', 'camel', 'grey']],
   clean_girl: ['Clean girl', 'minimal', 'women', 'Fitted tank, wide trousers, gold hoops, slick bun', 'fitted top, fluid bottom', ['fitted tank', 'wide trousers', 'oversized blazer', 'gold hoops', 'ballet flats'], ['rib knit', 'linen', 'silk'], ['white', 'beige', 'sand', 'gold']],
-  normcore: ['Normcore', 'minimal', 'all', 'Plain on purpose: fleece, straight jeans, dad sneakers', 'regular, nothing tailored', ['plain tee', 'fleece', 'straight jeans', 'dad sneakers', 'cap'], ['cotton', 'fleece', 'denim'], ['grey', 'navy', 'white', 'light wash']],
   // ── Tokyo & Seoul
   city_boy: ['City boy', 'tokyo', 'all', 'Tokyo Popeye: oversized button-down, wide chinos, tote', 'big shirt, wide trousers, relaxed', ['oversized button-down', 'wide chinos', 'knit vest', 'canvas tote', 'plain sneakers'], ['oxford cloth', 'cotton twill'], ['navy', 'khaki', 'white', 'pastel stripe']],
   amekaji: ['Amekaji', 'tokyo', 'all', 'Japanese Americana: raw denim, flannel, work boots', 'straight denim, layered shirts and jackets', ['raw selvedge jeans', 'flannel shirt', 'deck jacket', 'heavy loopwheel tee', 'work boots'], ['selvedge denim', 'flannel', 'leather'], ['indigo', 'red check', 'olive', 'brown']],
